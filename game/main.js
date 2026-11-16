@@ -972,7 +972,7 @@ function runCheat(raw) {
   }
   if ((m = s.match(/^(?:coins|монеты|листья)\s*(\d+)$/))) { save.coins += Math.min(99999, +m[1]); persist(); buildMenu(); return `Готово: +${m[1]} ${COIN}`; }
   if (s === 'alltools' || s === 'все инструменты') { save.tools = Object.keys(TOOLS); persist(); buildMenu(); return 'Готово: все инструменты открыты.'; }
-  return 'Не знаю такой код. Попробуй: to level 2, to level 3, coins 50, alltools';
+  return 'Такого кода нет.';
 }
 $('cheatbtn').onclick = () => { $('cheat').classList.remove('hidden'); $('cheatmsg').textContent = ''; $('cheatin').focus(); };
 $('cheatclose').onclick = () => $('cheat').classList.add('hidden');
