@@ -15,6 +15,7 @@
   .hidden { display:none !important; }
   #hud { position:fixed; inset:0; pointer-events:none; }
   #top { position:absolute; left:16px; top:14px; right:16px; display:flex; gap:16px; align-items:flex-start; justify-content:space-between; }
+  #bag { border-radius:8px; padding:3px 6px; background:linear-gradient(90deg, color-mix(in srgb, var(--bagcol,#d9822b) 55%, #fff) var(--fill,0%), transparent var(--fill,0%)); transition:background .15s; }
   .pill { background:var(--paper); border:3px solid var(--ink); border-radius:14px; padding:8px 14px; font-weight:700; box-shadow:0 3px 0 rgba(0,0,0,.25); }
   #job { min-width:260px; }
   .bar { height:16px; background:#e8d9b5; border:2px solid var(--ink); border-radius:10px; overflow:hidden; margin-top:6px; }
@@ -59269,12 +59270,43 @@ const BOX = new THREE.Vector3(15, 0, -15);     // коробка (листья)
 const TREE = new THREE.Vector3(0, 0, 0);       // дерево силы
 const DROP_R = 3.6;
 
-const JOBS = {
-  leaves:   { name: 'Убрать листья',     icon: '🍂', tools: ['broom', 'rake', 'wrake'],            drop: 'box',  boss: 'Листовой Пугало', unlock: 1 },
-  branches: { name: 'Пилить ветки',      icon: '🪵', tools: ['saw', 'lsaw', 'tsaw', 'chain'],      drop: 'wood', boss: 'Дровосек-Болван', unlock: 2 },
-  pile:     { name: 'Листья в коробку',  icon: '📦', tools: ['scoop', 'shovel', 'bucket'],         drop: 'box',  boss: 'Куча-Великан',    unlock: 3 },
+/* Места сдачи. Коробка и поленница стоят всегда, остальные появляются, когда нужны работе. */
+const DROPS = {
+  box:     { pos: BOX,  name: 'в коробку (справа сзади)' },
+  wood:    { pos: WOOD, name: 'на поленницу (слева сзади)' },
+  compost: { pos: new THREE.Vector3(-16, 0, 9),  name: 'в компостную кучу (слева)' },
+  crate:   { pos: new THREE.Vector3(16, 0, 9),   name: 'в ящик (справа)' },
+  barrel:  { pos: new THREE.Vector3(0, 0, -16),  name: 'в бочку (у дома)' },
 };
-const DROP_NAME = { box: 'в коробку (справа сзади)', wood: 'на поленницу (слева сзади)' };
+const DROP_NAME = Object.fromEntries(Object.entries(DROPS).map(([k, v]) => [k, v.name]));
+
+/* Работы. mech: 'sweep' (метёшь всё вокруг, как листья) или 'hold' (встал у предмета и держишь, как ветки).
+   col: цвет того, что убираешь (им же краснеет рюкзак). spiders: прячутся ли под этим паучки. help: сколько несёт помощник и сколько возится. */
+const JOBS = {
+  leaves:   { name: 'Убрать листья',     icon: '🍂', tools: ['broom', 'rake', 'wrake'],            drop: 'box',  boss: 'Листовой Пугало', unlock: 1, mech: 'sweep', col: 0xd9822b, item: 'leaf', spiders: true, help: { cap: 25, time: 0.25 },
+            hint: 'Держи ПРОБЕЛ у листьев, потом неси их в коробку справа сзади (жёлтое кольцо). Shift: бег' },
+  branches: { name: 'Пилить ветки',      icon: '🪵', tools: ['saw', 'lsaw', 'tsaw', 'chain'],      drop: 'wood', boss: 'Дровосек-Болван', unlock: 2, mech: 'hold',  col: 0x8a5a30, item: 'log', spiders: false, help: { cap: 1, time: 2.8 }, word: 'Бревно',
+            hint: 'Встань у ветки и держи ПРОБЕЛ: распилишь. Бревно неси на поленницу слева сзади. Shift: бег' },
+  pile:     { name: 'Листья в коробку',  icon: '📦', tools: ['scoop', 'shovel', 'bucket'],         drop: 'box',  boss: 'Куча-Великан',    unlock: 3, mech: 'hold',  col: 0xc0592b, item: 'heap', spiders: true, fly: true, help: { cap: 2, time: 1.4 }, word: 'Полный совок',
+            hint: 'Подбирай кучки листьев совком (ПРОБЕЛ) и неси в коробку справа сзади. Shift: бег' },
+};
+
+/* Новые профессии: по три в каждой главе (сезоне), открываются с 4-го уровня главы.
+   [id, название, значок, с какого уровня, mech, куда сдавать, цвет, предмет, имя босса, подсказка, [[инструмент, значок, вид, размер], ×3]] */
+const NEW_JOBS = [
+  ['grass', 'Косить траву', '🌿', 4, 'sweep', 'compost', 0x5fae3a, 'grass', 'Зелёный Колосок', 'косишь траву', [['Серп', '🌾', 'blade', 1], ['Коса', '🌾', 'blade', 1.5], ['Газонокосилка', '⚙️', 'mower', 1]]],
+  ['apples', 'Собрать яблоки', '🍎', 4, 'hold', 'crate', 0xd63a2f, 'apple', 'Яблочный Гигант', 'собираешь яблоки', [['Корзинка', '🧺', 'basket', 1], ['Плодосъёмник', '🪝', 'hook', 1.2], ['Садовая тележка', '🛒', 'basket', 1.7]]],
+  ['weeds', 'Полоть сорняки', '🌱', 4, 'hold', 'compost', 0x4e8f2e, 'weed', 'Король Сорняков', 'полешь грядки', [['Тяпка', '🪴', 'hoe', 1], ['Большая тяпка', '🪴', 'hoe', 1.4], ['Культиватор', '⚙️', 'hoe', 1.9]]],
+  ['acorns', 'Собрать жёлуди', '🌰', 14, 'sweep', 'crate', 0x8a5a2b, 'acorn', 'Дуб-Дубина', 'сгребаешь жёлуди', [['Грабельки', '🔱', 'rake', 0.75], ['Садовые грабли', '🔱', 'rake', 1], ['Желудёвый ролик', '🧲', 'rake', 1.35]]],
+  ['mush', 'Собрать грибы', '🍄', 14, 'hold', 'crate', 0xe8d8c0, 'mushroom', 'Мухомор-Задира', 'ищешь грибы', [['Грибной нож', '🔪', 'hook', 0.8], ['Корзина грибника', '🧺', 'basket', 1.2], ['Большой короб', '🧺', 'basket', 1.8]]],
+  ['stones', 'Убрать камни', '🪨', 14, 'hold', 'barrel', 0x8c8f94, 'stone', 'Каменный Бык', 'убираешь камни', [['Лом', '⛏️', 'hook', 1], ['Кирка', '⛏️', 'hook', 1.4], ['Тачка', '🛒', 'basket', 1.9]]],
+  ['pumpkins', 'Собрать тыквы', '🎃', 24, 'hold', 'crate', 0xf08a1c, 'pumpkin', 'Тыквоголовый', 'собираешь тыквы', [['Садовый нож', '🔪', 'blade', 0.8], ['Тележка', '🛒', 'basket', 1.5], ['Подъёмник', '🏗️', 'hook', 1.8]]],
+  ['trash', 'Собрать мусор', '🗑️', 24, 'sweep', 'barrel', 0x7d8a95, 'trash', 'Мусорный Монстр', 'убираешь мусор', [['Щётка', '🧹', 'broom', 1], ['Совок-щётка', '🧹', 'rake', 0.9], ['Мусоросборник', '⚙️', 'mower', 1]]],
+  ['webs', 'Снять паутину', '🕸️', 24, 'sweep', 'compost', 0xe6e6ee, 'web', 'Паучья Королева', 'снимаешь паутину', [['Метёлка', '🪶', 'broom', 0.9], ['Длинная метёлка', '🪶', 'broom', 1.5], ['Пылесос', '⚙️', 'chain', 1]]],
+  ['snow', 'Чистить снег', '❄️', 34, 'sweep', 'barrel', 0xeaf4ff, 'snow', 'Снеговик-Великан', 'чистишь снег', [['Лопата для снега', '🥄', 'scoop', 1], ['Широкая лопата', '🥄', 'scoop', 1.5], ['Снегоуборщик', '⚙️', 'mower', 1.2]]],
+  ['potato', 'Копать картошку', '🥔', 34, 'hold', 'crate', 0xc9a45c, 'potato', 'Картофельный Голем', 'копаешь картошку', [['Вилы', '🔱', 'hook', 1], ['Лопата-штык', '🥄', 'scoop', 1.3], ['Картофелекопалка', '⚙️', 'mower', 1.4]]],
+  ['sunflower', 'Срезать подсолнухи', '🌻', 34, 'hold', 'compost', 0xf2c21b, 'sunflower', 'Подсолнух-Громила', 'срезаешь подсолнухи', [['Секатор', '✂️', 'blade', 0.8], ['Садовые ножницы', '✂️', 'blade', 1.2], ['Мотокоса', '⚙️', 'chain', 1.3]]],
+];
 
 /* Инструменты. price = цена в листочках (0: есть сразу). cap = сколько несёшь за раз, capStep = прибавка вместимости от улучшения.
    Листья: reach/rate/n (охват, пауза между взмахами, сколько листьев за взмах). Ветки и кучки: range/time (дальность, секунды работы). */
@@ -59290,6 +59322,20 @@ const TOOLS = {
   shovel: { job: 'pile',     name: 'Большой совок',    icon: '🥄', price: 15, cap: 5,  capStep: 1,  range: 2.5, time: 0.5, look: 'scoop', scale: 1.4 },
   bucket: { job: 'pile',     name: 'Ковш-лопата',      icon: '🪣', price: 45, cap: 8,  capStep: 2,  range: 3.0, time: 0.35, look: 'scoop', scale: 1.8 },
 };
+/* Собираем новые работы и по три инструмента к каждой. Цифры инструментов берутся по типу работы, цена растёт с главой. */
+{
+  const SWEEP = [{ cap: 20, capStep: 8, reach: 1.4, rate: 0.06, n: 3 }, { cap: 30, capStep: 10, reach: 2.0, rate: 0.07, n: 6 }, { cap: 45, capStep: 12, reach: 2.8, rate: 0.06, n: 9 }];
+  const HOLD = [{ cap: 3, capStep: 1, range: 2.0, time: 0.6 }, { cap: 5, capStep: 1, range: 2.5, time: 0.5 }, { cap: 8, capStep: 2, range: 3.0, time: 0.35 }];
+  for (const [id, name, icon, unlock, mech, drop, col, item, boss, doing, tl] of NEW_JOBS) {
+    const ch = Math.ceil(unlock / 10), ids = [];
+    tl.forEach(([tn, ti, look, scale], k) => {
+      const tid = `${id}${k + 1}`; ids.push(tid);
+      TOOLS[tid] = { job: id, name: tn, icon: ti, price: [0, 15, 45][k] * (1 + 0.5 * (ch - 1)) | 0, ...(mech === 'sweep' ? SWEEP : HOLD)[k], look, scale, tint: col };
+    });
+    JOBS[id] = { name, icon, tools: ids, drop, boss, unlock, mech, col, item, spiders: false, fly: true, help: mech === 'sweep' ? { cap: 25, time: 0.25 } : { cap: 2, time: 1.4 }, word: 'Полная ноша',
+                 hint: `Ты ${doing}: держи ПРОБЕЛ ${mech === 'sweep' ? 'и води инструментом по двору' : 'у предмета'}, потом неси ${DROP_NAME[drop]}. Shift: бег` };
+  }
+}
 const MODS = [{ rm: 0.25 }, { sm: 0.25 }, { cap: 1 }, { da: 0.5 }, { mm: 0.12 }];
 const MOD_DESC = ['Больше охват +25%', 'Работает быстрее +25%', 'Несёт больше', 'Сильнее бьёт босса +0.5', 'Быстрее ходит с ношей +12%'];
 const EFFECT_NAMES = {
@@ -59298,7 +59344,8 @@ const EFFECT_NAMES = {
   pile: ['Широкий край', 'Ловкий захват', 'Глубокий кузов', 'Железный край', 'Лёгкая ручка'],
 };
 const EFFECTS = {};
-for (const [t, T] of Object.entries(TOOLS)) EFFECTS[t] = EFFECT_NAMES[T.job].map((name, i) => ({ name, desc: MOD_DESC[i], mod: MODS[i] }));
+const effNames = job => EFFECT_NAMES[job] || EFFECT_NAMES[JOBS[job].mech === 'sweep' ? 'leaves' : 'pile'];
+for (const [t, T] of Object.entries(TOOLS)) EFFECTS[t] = effNames(T.job).map((name, i) => ({ name, desc: MOD_DESC[i], mod: MODS[i] }));
 
 const ABIL = {
   walk:   { name: 'Быстрая ходьба',    icon: '🚶', desc: '+8% к скорости ходьбы',    max: 5 },
@@ -59319,13 +59366,14 @@ function levelDef(n) {
   const finale = n % SEASON === 0;
   return {
     n, season: Math.ceil(n / SEASON), finale, boss: finale && n >= 20,
-    jobs: n === 1 ? ['leaves'] : n === 2 ? ['leaves', 'branches'] : ['leaves', 'branches', 'pile'],
+    jobs: Object.keys(JOBS).filter(id => JOBS[id].unlock <= n),   // работы открываются по уровням: 1, 2, 3, а потом по три новых в каждой главе (с её 4-го уровня)
     hp: 12 + Math.round(n * 0.7), speed: Math.min(3.2, 1.6 + n * 0.04), shoots: true,
   };
 }
 const totalFor = (job, n) => {
   const m = Math.min(n, 40), k = n % SEASON === 0 ? 1.15 : 1;
-  return Math.round(k * { leaves: 70 + 8 * m, branches: 3 + Math.ceil(m / 2), pile: 8 + Math.ceil(m / 2) }[job]);
+  const base = { leaves: 70 + 8 * m, branches: 3 + Math.ceil(m / 2), pile: 8 + Math.ceil(m / 2) }[job] ?? (JOBS[job].mech === 'sweep' ? 60 + 6 * m : 7 + Math.ceil(m / 2));
+  return Math.round(k * base);
 };
 
 /* ================= Сохранение ================= */
@@ -59341,6 +59389,11 @@ try {
   }
 } catch (e) {}
 const persist = () => { try { localStorage.setItem('na-dache-save', JSON.stringify(save)); } catch (e) {} };
+/* Первый (бесплатный) инструмент каждой открытой работы выдаётся сам */
+function grantFreeTools() {
+  for (const [t, T] of Object.entries(TOOLS)) if (T.price === 0 && JOBS[T.job].unlock <= save.maxLevel && !save.tools.includes(t)) save.tools.push(t);
+}
+grantFreeTools();
 
 const toolActive = t => save.placed.includes(t) || save.workshop;
 const slots = () => 3 + save.treeLvl;
@@ -59401,6 +59454,7 @@ function makeLog(len = 1.2, r = 0.2) {
 /* Двор */
 const world = new THREE.Group(); scene.add(world);
 let boxFill, treeGroup, dropRing;
+const dropFill = {}, dropGroups = {};   // «наполнение» мест сдачи и их модели
 {
   const ground = mesh(new THREE.PlaneGeometry(200, 200), mat(0x8fbf5a), 0, 0, 0, false);
   ground.rotation.x = -Math.PI / 2; world.add(ground);
@@ -59447,6 +59501,29 @@ let boxFill, treeGroup, dropRing;
   bx.add(mesh(new THREE.BoxGeometry(0.2, 1.3, 3.4), wood, -2.1, 0.75, 0));
   boxFill = mesh(new THREE.SphereGeometry(1.7, 12, 8), mat(0xd9822b), 0, 0.3, 0, false); boxFill.scale.set(1.2, 0.01, 0.95);
   bx.add(boxFill); world.add(bx);
+  dropFill.box = boxFill;
+  // новые места сдачи: компостная куча, ящик, бочка. Показываются только когда нужны работе.
+  const mkDrop = (kind, build, fillGeo, fillScale) => {
+    const g = new THREE.Group(); g.position.copy(DROPS[kind].pos); build(g);
+    const f = mesh(fillGeo, mat(0xffffff), 0, 0.3, 0, false); f.scale.set(fillScale[0], 0.01, fillScale[1]); g.add(f);
+    g.visible = false; world.add(g); dropGroups[kind] = g; dropFill[kind] = f;
+  };
+  mkDrop('compost', g => {
+    const w = mat(0x6b4a2b);
+    g.add(mesh(new THREE.BoxGeometry(4.4, 0.2, 3.4), mat(0x4a3a24), 0, 0.1, 0));
+    for (const [sx, sz, x, z] of [[4.4, 0.25, 0, 1.6], [4.4, 0.25, 0, -1.6], [0.25, 3.4, 2.1, 0], [0.25, 3.4, -2.1, 0]]) g.add(mesh(new THREE.BoxGeometry(sx, 0.9, sz), w, x, 0.55, z));
+  }, new THREE.SphereGeometry(1.7, 12, 8), [1.2, 0.95]);
+  mkDrop('crate', g => {
+    const w = mat(0xc99a5b);
+    g.add(mesh(new THREE.BoxGeometry(4, 0.2, 3), mat(0x8a5a30), 0, 0.1, 0));
+    for (const [sx, sz, x, z] of [[4, 0.2, 0, 1.4], [4, 0.2, 0, -1.4], [0.2, 3, 1.9, 0], [0.2, 3, -1.9, 0]]) g.add(mesh(new THREE.BoxGeometry(sx, 1.2, sz), w, x, 0.7, z));
+    for (const x of [-1.9, 1.9]) for (const z of [-1.4, 1.4]) g.add(mesh(new THREE.BoxGeometry(0.3, 1.35, 0.3), mat(0x7a4a2a), x, 0.68, z));
+  }, new THREE.SphereGeometry(1.5, 12, 8), [1.15, 0.9]);
+  mkDrop('barrel', g => {
+    g.add(mesh(new THREE.CylinderGeometry(1.5, 1.35, 1.7, 16, 1, true), mat(0x7a5a3a, { side: THREE.DoubleSide }), 0, 0.85, 0));
+    g.add(mesh(new THREE.CylinderGeometry(1.35, 1.35, 0.1, 16), mat(0x5a432c), 0, 0.05, 0));
+    for (const y of [0.35, 1.35]) { const r = mesh(new THREE.TorusGeometry(1.46, 0.07, 6, 20), mat(0x4a4f55), 0, y, 0); r.rotation.x = Math.PI / 2; g.add(r); }
+  }, new THREE.SphereGeometry(1.3, 12, 8), [1, 1]);
   // дерево силы (в центре, открывается на 4 уровне)
   treeGroup = new THREE.Group(); treeGroup.position.copy(TREE);
   treeGroup.add(mesh(new THREE.CylinderGeometry(0.8, 1.2, 5, 10), mat(0x7a5230), 0, 2.5, 0));
@@ -59475,6 +59552,35 @@ const player = {
   hp: 5, maxHp: 5, inv: 0, swing: 0, bag: 0, carry: null, walkT: 0, vel: new THREE.Vector3(),
 };
 player.group.add(player.model); scene.add(player.group);
+
+/* Рюкзак на спине: чем больше набрал, тем он полнее, краснеет (становится цвета того, что собираешь) и из него торчит добыча */
+const PACK_EMPTY = new THREE.Color(0x8a6a4a);
+const pack = { g: new THREE.Group(), body: null, mat: mat(0x8a6a4a), stuff: new THREE.Group() };
+{
+  const g = pack.g, flap = mat(0x6e5238), strap = mat(0x4f3b28);
+  pack.body = new THREE.Group();
+  pack.body.add(mesh(new THREE.BoxGeometry(0.5, 0.58, 0.26), pack.mat, 0, 0, 0));
+  pack.body.add(mesh(new THREE.BoxGeometry(0.54, 0.14, 0.3), flap, 0, 0.27, 0));
+  pack.body.add(mesh(new THREE.BoxGeometry(0.34, 0.2, 0.08), flap, 0, -0.1, -0.16));
+  g.add(pack.body);
+  for (const x of [-0.28, 0.28]) g.add(mesh(new THREE.BoxGeometry(0.05, 0.46, 0.22), strap, x, 0.02, 0.0));
+  pack.stuff.position.set(0, 0.36, 0); g.add(pack.stuff);
+  g.position.set(0, 1.42, -0.34); player.model.add(g);
+}
+function updatePack() {
+  const J = JOBS[G.job], k = G.held ? Math.min(1, player.bag / Math.max(1, G.st.cap)) : 0, col = new THREE.Color(J.col);
+  pack.mat.color.copy(PACK_EMPTY).lerp(col, 0.8 * Math.pow(k, 0.7));   // цвет меняется по мере наполнения
+  pack.body.scale.set(1 + 0.12 * k, 1 + 0.08 * k, 1 + 0.45 * k);        // раздувается
+  pack.stuff.clear();
+  const n = player.bag > 0 ? Math.min(7, 1 + Math.ceil(k * 6)) : 0;
+  for (let i = 0; i < n; i++) {
+    const a = (i / 7) * 6.28 + 0.7, r = 0.05 + 0.2 * ((i * 37) % 10) / 10;
+    let o;
+    if (G.job === 'branches') { o = makeLog(0.9, 0.07); o.rotation.set(0, i * 1.1, Math.PI / 2 + (i % 3 - 1) * 0.25); o.position.set(Math.cos(a) * r, 0.15 + (i % 2) * 0.1, Math.sin(a) * r * 0.5); }
+    else { o = mesh(new THREE.IcosahedronGeometry(0.11 + (i % 3) * 0.03, 0), mat(i % 2 ? col : col.clone().offsetHSL(0.02, 0, -0.08)), Math.cos(a) * r * 1.2, 0.05 + 0.1 * (i % 3), Math.sin(a) * r * 0.6); }
+    pack.stuff.add(o);
+  }
+}
 let charTemplate = null;
 new GLTFLoader().load(asset('character'), gltf => {
   const m = gltf.scene;
@@ -59496,7 +59602,8 @@ player.tool.position.set(0.45, 1.2, 0.3); player.model.add(player.tool);
 function buildTool(id, grp) {
   grp.clear(); grp.scale.setScalar(1);
   const T = TOOLS[id], kind = T.look;
-  const wood = mat(0x9a6b3c), metal = mat(0xb8c0c8, { metalness: .5, roughness: .4 }), straw = mat(0xd8b45a), orange = mat(0xe0702a);
+  const wood = mat(0x9a6b3c), metal = mat(0xb8c0c8, { metalness: .5, roughness: .4 }), orange = mat(0xe0702a);
+  const straw = mat(T.tint ? new THREE.Color(T.tint).lerp(new THREE.Color(0xd8b45a), 0.55) : 0xd8b45a);
   const grip = new THREE.Vector3(0, 0.3, 0.2);
   // ручка: возвращает направление и конец
   const shaft = (len, a) => {
@@ -59517,6 +59624,26 @@ function buildTool(id, grp) {
     const s = mesh(new THREE.BoxGeometry(0.7, 0.05, 0.6), metal, end.x, end.y - 0.03, end.z + 0.2); grp.add(s);
     grp.add(mesh(new THREE.BoxGeometry(0.7, 0.3, 0.05), metal, end.x, end.y + 0.1, end.z - 0.08));
     for (const x of [-0.33, 0.33]) grp.add(mesh(new THREE.BoxGeometry(0.04, 0.2, 0.6), metal, end.x + x, end.y + 0.05, end.z + 0.2));
+  } else if (kind === 'blade') {   // серп / коса / ножницы: ручка и изогнутое лезвие
+    const { end } = shaft(1.6, 0.7);
+    const b = mesh(new THREE.BoxGeometry(0.06, 0.04, 0.8), metal, end.x, end.y, end.z + 0.3); b.rotation.x = 0.35; grp.add(b);
+    const tip = mesh(new THREE.ConeGeometry(0.05, 0.3, 4), metal, end.x, end.y - 0.08, end.z + 0.8); tip.rotation.x = Math.PI / 2 + 0.6; grp.add(tip);
+  } else if (kind === 'hoe') {   // тяпка / культиватор
+    const { end } = shaft(1.8, 0.6);
+    grp.add(mesh(new THREE.BoxGeometry(0.45, 0.05, 0.05), metal, end.x, end.y, end.z));
+    const h = mesh(new THREE.BoxGeometry(0.45, 0.3, 0.04), metal, end.x, end.y - 0.15, end.z + 0.05); h.rotation.x = -0.4; grp.add(h);
+  } else if (kind === 'hook') {   // крюк / лом / кирка / вилы: ручка и загнутый конец
+    const { end } = shaft(1.7, 0.65);
+    grp.add(mesh(new THREE.BoxGeometry(0.7, 0.07, 0.07), metal, end.x, end.y, end.z));
+    for (const s of [-1, 1]) { const t = mesh(new THREE.ConeGeometry(0.06, 0.4, 5), metal, end.x + s * 0.33, end.y - 0.18, end.z); grp.add(t); }
+  } else if (kind === 'basket') {   // корзина / тележка / короб
+    grp.add(mesh(new THREE.CylinderGeometry(0.34, 0.26, 0.34, 10, 1, true), mat(0xc79a52, { side: THREE.DoubleSide }), 0, 0, 0.45));
+    grp.add(mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.04, 10), mat(0xa57a3a), 0, -0.17, 0.45));
+    const hd = mesh(new THREE.TorusGeometry(0.3, 0.03, 5, 12, Math.PI), mat(0x8a5a30), 0, 0.17, 0.45); hd.rotation.y = Math.PI / 2; grp.add(hd);
+  } else if (kind === 'mower') {   // газонокосилка / снегоуборщик / пылесос: коробка на колёсах с ручкой
+    grp.add(mesh(new THREE.BoxGeometry(0.5, 0.26, 0.6), mat(T.tint ? new THREE.Color(T.tint).lerp(new THREE.Color(0xe0702a), 0.6) : 0xe0702a), 0, -0.1, 0.7));
+    for (const s of [-1, 1]) grp.add(mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.06, 10), mat(0x222222), s * 0.3, -0.18, 0.9));
+    const hd = mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.9, 5), mat(0x444444), 0, 0.2, 0.3); hd.rotation.x = 0.9; grp.add(hd);
   } else if (kind === 'chain') {
     grp.add(mesh(new THREE.BoxGeometry(0.22, 0.28, 0.5), orange, 0, 0, 0.25));
     grp.add(mesh(new THREE.BoxGeometry(0.06, 0.14, 0.9), mat(0x222222), 0, 0, 0.9));
@@ -59592,7 +59719,7 @@ const hint = t => { $('hint').textContent = tt(t); };
 function renderHearts() { $('hearts').textContent = '❤️'.repeat(player.hp) + '🤍'.repeat(Math.max(0, player.maxHp - player.hp)); }
 const nearTree = () => save.maxLevel >= 4 && dist2(player.pos, TREE) < 5;
 const working = () => !G.paused && (keys.Space || mouseDown || touchWork);
-const dropPos = job => JOBS[job].drop === 'wood' ? WOOD : BOX;
+const dropPos = job => DROPS[JOBS[job].drop].pos;
 
 const leafGeo = new THREE.CircleGeometry(0.2, 5);
 const leafMats = leafCols.map(c => new THREE.MeshStandardMaterial({ color: c, roughness: 1, side: THREE.DoubleSide }));
@@ -59610,10 +59737,62 @@ function clearLevel() {
   killSpiders(false); G.spiderLeft = 0; G.spiderSeen = false;
   for (const f of G.fx) scene.remove(f.obj); G.fx = [];
   for (const h of helpers) scene.remove(h.obj); helpers = [];
-  pileGroup.clear(); pileCount = 0; boxFill.scale.y = 0.01;
+  pileGroup.clear(); pileCount = 0; for (const f of Object.values(dropFill)) f.scale.y = 0.01;
+  for (const g of Object.values(dropGroups)) g.visible = false;
   player.bag = 0; updateCarry(); dropRing.visible = false;
 }
-const farFromDrops = (x, z) => Math.hypot(x - WOOD.x, z - WOOD.z) > 5 && Math.hypot(x - BOX.x, z - BOX.z) > 5 && Math.hypot(x - TREE.x, z - TREE.z) > 4;
+const farFromDrops = (x, z) => Math.hypot(x - TREE.x, z - TREE.z) > 4 && Object.values(DROPS).every(d => Math.hypot(x - d.pos.x, z - d.pos.z) > 5);
+
+/* Предметы, которые убирают. kind = job.item. Каждый раз одинаковое число случайных чисел RNG, чтобы двор совпадал у всех в комнате. */
+const itemMat = {};
+const im = c => itemMat[c] || (itemMat[c] = mat(c));
+const grassGeo = new THREE.ConeGeometry(0.1, 0.55, 4), acornGeo = new THREE.IcosahedronGeometry(0.13, 0), trashGeo = new THREE.BoxGeometry(0.28, 0.12, 0.2);
+const webGeo = new THREE.CircleGeometry(0.34, 7), snowGeo = new THREE.SphereGeometry(0.3, 7, 5), stoneGeo = new THREE.DodecahedronGeometry(0.4, 0), potatoGeo = new THREE.SphereGeometry(0.3, 8, 6);
+const webMat = new THREE.MeshStandardMaterial({ color: 0xf2f2f8, roughness: 1, transparent: true, opacity: 0.75, side: THREE.DoubleSide });
+function makeItem(kind, x, z, i) {
+  let o;
+  if (kind === 'leaf') {
+    o = mesh(leafGeo, pick(leafMats), x, 0.03 + RNG() * 0.03, z, false); o.rotation.set(-Math.PI / 2, 0, rnd(0, 6.28)); o.scale.setScalar(rnd(0.8, 1.5));
+  } else if (kind === 'log') {
+    o = makeLog(rnd(2.2, 3), 0.14); o.position.set(x, 0.15, z); o.rotation.y = rnd(0, 6.28);
+    const twig = mesh(new THREE.CylinderGeometry(0.05, 0.07, 0.8, 5), logMat, rnd(-.6, .6), 0.25, 0.2); twig.rotation.z = 0.8; o.add(twig);
+  } else if (kind === 'heap') {
+    o = makeHeap(); o.position.set(x, 0, z);
+  } else if (kind === 'grass') {
+    o = new THREE.Group(); for (let k = 0; k < 3; k++) o.add(mesh(grassGeo, im(k % 2 ? 0x5fae3a : 0x74c24a), rnd(-.12, .12), 0.27, rnd(-.12, .12), false));
+    o.position.set(x, 0, z); o.rotation.y = rnd(0, 6.28); o.scale.setScalar(rnd(0.9, 1.5));
+  } else if (kind === 'acorn') {
+    o = mesh(acornGeo, im(pick([0x8a5a2b, 0x9c6a35, 0x6e4624])), x, 0.1, z, false); o.scale.set(1, 1.3, 1); o.rotation.y = rnd(0, 6.28);
+  } else if (kind === 'trash') {
+    o = mesh(trashGeo, im(pick([0x7d8a95, 0xc0504d, 0x4f81bd, 0xd9d9d9, 0x9bbb59])), x, 0.07, z, false); o.rotation.y = rnd(0, 6.28); o.scale.setScalar(rnd(0.8, 1.5));
+  } else if (kind === 'web') {
+    o = mesh(webGeo, webMat, x, 0.04 + RNG() * 0.02, z, false); o.rotation.set(-Math.PI / 2, 0, rnd(0, 6.28)); o.scale.setScalar(rnd(0.8, 1.5));
+  } else if (kind === 'snow') {
+    o = mesh(snowGeo, im(0xf4f9ff), x, 0.08, z, false); o.scale.set(rnd(1, 1.8), 0.45, rnd(1, 1.8));
+  } else if (kind === 'apple') {
+    o = new THREE.Group(); o.add(mesh(new THREE.SphereGeometry(0.28, 10, 8), im(0xd63a2f), 0, 0.28, 0)); o.add(mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.14, 4), im(0x5a3a1a), 0, 0.58, 0, false));
+    o.add(mesh(new THREE.CircleGeometry(0.1, 5), leafMats[3], 0.1, 0.6, 0, false)); o.position.set(x, 0, z);
+  } else if (kind === 'weed') {
+    o = new THREE.Group(); for (let k = 0; k < 5; k++) { const c = mesh(grassGeo, im(k % 2 ? 0x4e8f2e : 0x3a7a22), rnd(-.2, .2), 0.35, rnd(-.2, .2), false); c.rotation.set(rnd(-.4, .4), 0, rnd(-.4, .4)); c.scale.set(1.3, 1.3, 1.3); o.add(c); }
+    o.position.set(x, 0, z);
+  } else if (kind === 'mushroom') {
+    o = new THREE.Group(); o.add(mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.3, 6), im(0xf1e8d6), 0, 0.15, 0, false));
+    const cap = mesh(new THREE.SphereGeometry(0.24, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2), im(pick([0xc0392b, 0xb5651d, 0xe0b87a])), 0, 0.3, 0, false); o.add(cap); o.position.set(x, 0, z);
+  } else if (kind === 'stone') {
+    o = mesh(stoneGeo, im(pick([0x8c8f94, 0x777b80, 0xa0a3a8])), x, 0.3, z); o.scale.set(rnd(0.9, 1.4), rnd(0.7, 1.1), rnd(0.9, 1.4)); o.rotation.set(rnd(0, 3), rnd(0, 3), 0);
+  } else if (kind === 'pumpkin') {
+    o = new THREE.Group(); const b = mesh(new THREE.SphereGeometry(0.55, 12, 9), im(0xf08a1c), 0, 0.42, 0); b.scale.y = 0.8; o.add(b);
+    o.add(mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.2, 5), im(0x4e7a2a), 0, 0.88, 0, false)); o.position.set(x, 0, z);
+  } else if (kind === 'potato') {
+    o = new THREE.Group(); const mound = mesh(new THREE.SphereGeometry(0.5, 9, 6), im(0x7a5a38), 0, 0.1, 0, false); mound.scale.y = 0.4; o.add(mound);
+    for (let k = 0; k < 2; k++) { const p = mesh(potatoGeo, im(0xc9a45c), rnd(-.2, .2), 0.28, rnd(-.2, .2)); p.scale.set(1.2, 0.8, 0.9); o.add(p); } o.position.set(x, 0, z);
+  } else {   // sunflower
+    o = new THREE.Group(); o.add(mesh(new THREE.CylinderGeometry(0.05, 0.07, 1.4, 5), im(0x4e7a2a), 0, 0.7, 0));
+    const h = mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.1, 12), im(0xf2c21b), 0, 1.45, 0.08); h.rotation.x = Math.PI / 2 - 0.3; o.add(h);
+    const c = mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.13, 10), im(0x5a3a1a), 0, 1.45, 0.1, false); c.rotation.x = Math.PI / 2 - 0.3; o.add(c); o.position.set(x, 0, z);
+  }
+  return o;
+}
 function randSpot(margin = 2) {
   for (;;) { const x = rnd(-YARD + margin, YARD - margin), z = rnd(-YARD + margin, YARD - margin); if (farFromDrops(x, z) && Math.hypot(x - player.pos.x, z - player.pos.z) > 3) return [x, z]; }
 }
@@ -59621,7 +59800,8 @@ function randSpot(margin = 2) {
 function startLevel(level, job, tool, seed = (Math.random() * 1e9) | 0) {
   clearLevel(); G.seed = seed;
   G.level = level; G.job = job; G.state = 'play'; G.done = 0; G.total = totalFor(job, level.n); G.paused = false;
-  G.spiderLeft = level.season >= SPIDER_SEASON && job !== 'branches' ? 3 + Math.min(4, Math.floor((level.n - 21) / 4)) : 0;   // сколько паучков спрячется на уровне
+  const J = JOBS[job];
+  G.spiderLeft = level.season >= SPIDER_SEASON && J.spiders ? 3 + Math.min(4, Math.floor((level.n - 21) / 4)) : 0;   // сколько паучков спрячется на уровне (под листьями)
   G.tool = tool && JOBS[job].tools.includes(tool) && save.tools.includes(tool) ? tool : JOBS[job].tools[0];
   G.st = stats(G.tool);
   player.pos.set(0, 0, 15); player.dir.set(0, 0, -1); player.maxHp = 5 + (save.abil.hearts || 0); player.hp = player.maxHp; player.inv = 0; player.swing = 0;
@@ -59630,16 +59810,17 @@ function startLevel(level, job, tool, seed = (Math.random() * 1e9) | 0) {
   G.held = !treeGroup.visible;   // когда есть дерево, уровень начинается с пустыми руками: инструмент лежит у дерева
   player.tool.visible = G.held; refreshTreeTools();
   dropRing.position.copy(dropPos(job)); dropRing.visible = true;
+  for (const [k, g] of Object.entries(dropGroups)) g.visible = k === J.drop;
+  if (dropFill[J.drop] && J.drop !== 'box') dropFill[J.drop].material.color.setHex(J.col);   // наполнение того же цвета, что и добыча
+  boxFill.material.color.setHex(J.drop === 'box' ? J.col : 0xd9822b);
   RNG = seeded(seed);
   for (let i = 0; i < G.total; i++) {
-    const [x, z] = randSpot(); let o;
-    if (job === 'leaves') {
-      o = mesh(leafGeo, pick(leafMats), x, 0.03 + RNG() * 0.03, z, false); o.rotation.set(-Math.PI / 2, 0, rnd(0, 6.28)); o.scale.setScalar(rnd(0.8, 1.5));
-      if (i > 20 && RNG() < .5) { const p = pick(G.items).obj.position; o.position.x = THREE.MathUtils.clamp(p.x + rnd(-2, 2), -YARD, YARD); o.position.z = THREE.MathUtils.clamp(p.z + rnd(-2, 2), -YARD, YARD); if (!farFromDrops(o.position.x, o.position.z)) o.position.set(x, o.position.y, z); }
-    } else if (job === 'branches') {
-      o = makeLog(rnd(2.2, 3), 0.14); o.position.set(x, 0.15, z); o.rotation.y = rnd(0, 6.28);
-      const twig = mesh(new THREE.CylinderGeometry(0.05, 0.07, 0.8, 5), logMat, rnd(-.6, .6), 0.25, 0.2); twig.rotation.z = 0.8; o.add(twig);
-    } else { o = makeHeap(); o.position.set(x, 0, z); }
+    const [x, z] = randSpot();
+    const o = makeItem(J.item, x, z, i);
+    if (J.mech === 'sweep' && i > 20 && RNG() < .5) {   // мелочь собирается кучками
+      const p = pick(G.items).obj.position, nx = THREE.MathUtils.clamp(p.x + rnd(-2, 2), -YARD, YARD), nz = THREE.MathUtils.clamp(p.z + rnd(-2, 2), -YARD, YARD);
+      if (farFromDrops(nx, nz)) { o.position.x = nx; o.position.z = nz; }
+    }
     scene.add(o); G.items.push({ obj: o, kind: job, id: i });
   }
   RNG = Math.random;
@@ -59647,9 +59828,7 @@ function startLevel(level, job, tool, seed = (Math.random() * 1e9) | 0) {
   renderHearts(); updateProgress(); spawnHelpers();
   toast(level.finale ? `Уровень ${level.n}: большая уборка!` : `Уровень ${level.n}`);
   if (!G.held) { hint('Инструмент лежит у дерева в центре двора. Подойди и нажми Q: взять. Потом работай (ПРОБЕЛ). Shift: бег'); toast(`Уровень ${level.n}: возьми инструмент у дерева (Q)`, 2600); return; }
-  hint({ leaves: 'Держи ПРОБЕЛ у листьев, потом неси их в коробку справа сзади (жёлтое кольцо). Shift: бег',
-         branches: 'Встань у ветки и держи ПРОБЕЛ: распилишь. Бревно неси на поленницу слева сзади. Shift: бег',
-         pile: 'Подбирай кучки листьев совком (ПРОБЕЛ) и неси в коробку справа сзади. Shift: бег' }[job]);
+  hint(J.hint);
 }
 
 function updateProgress() {
@@ -59657,6 +59836,9 @@ function updateProgress() {
   $('jobname').textContent = `${j.icon} ${j.name}: ${G.done} / ${G.total}`;
   $('jobfill').style.width = (100 * G.done / Math.max(1, G.total)) + '%';
   $('bag').textContent = (G.held ? `${TOOLS[G.tool].icon} ${TOOLS[G.tool].name}   ·   ${G.job === 'branches' ? '🪵' : '🎒'} ${player.bag} / ${G.st.cap}` : `✋ Руки пустые (${TOOLS[G.tool].name} у дерева)`);
+  // полоска рюкзака: заливается цветом добычи по мере наполнения
+  const k = G.held ? Math.min(1, player.bag / Math.max(1, G.st.cap)) : 0;
+  $('bag').style.setProperty('--fill', (100 * k) + '%'); $('bag').style.setProperty('--bagcol', '#' + new THREE.Color(j.col).getHexString());
 }
 
 /* ---------- Эффекты ---------- */
@@ -59682,7 +59864,7 @@ function removeItem(it, flyTo) {
   if (!net.applying) netSend({ t: 'rm', id: it.id, seed: G.seed });
   if (flyTo) G.fx.push({ obj: it.obj, fly: flyTo, life: .25, t: 0 }); else scene.remove(it.obj);
   // с 3-й главы под листиком может сидеть паучок
-  if (G.state === 'play' && !net.applying && it.kind !== 'branches' && G.spiderLeft > 0 && Math.random() < Math.min(0.5, 1.3 * G.spiderLeft / (G.items.length + 1))) { G.spiderLeft--; spawnSpider(p); }
+  if (G.state === 'play' && !net.applying && JOBS[it.kind].spiders && G.spiderLeft > 0 && Math.random() < Math.min(0.5, 1.3 * G.spiderLeft / (G.items.length + 1))) { G.spiderLeft--; spawnSpider(p); }
   return true;
 }
 
@@ -59756,23 +59938,17 @@ function attackSpiders(dt) {
 }
 
 /* ---------- Ноша игрока ---------- */
-function updateCarry() {
-  if (player.carry) { player.model.remove(player.carry); player.carry = null; }
-  if (player.bag > 0) {
-    const g = new THREE.Group();
-    if (G.job === 'branches') for (let i = 0; i < player.bag; i++) { const l = makeLog(); l.position.y = i * 0.32; l.rotation.y = i * 0.6; g.add(l); }
-    else if (G.job === 'leaves') { const f = 0.5 + 0.9 * Math.min(1, player.bag / G.st.cap); const s = mesh(new THREE.SphereGeometry(.45, 10, 8), mat(0xc79a52), 0, 0, 0); s.scale.set(f, f * .9, f); g.add(s); }
-    else for (let i = 0; i < player.bag; i++) { const h = makeHeap(); h.scale.setScalar(.55); h.position.set(i * .6 - .3, 0, 0); g.add(h); }
-    g.position.set(0, 2.85, 0); player.model.add(g); player.carry = g;
-  }
+function updateCarry() {   // то, что несёшь, лежит в рюкзаке на спине
+  updatePack();
   updateProgress();
 }
 function depositUnits(n, drop) {
   if (!net.applying) netSend({ t: 'dep', n, seed: G.seed });
   G.done += n;
-  if (G.job === 'branches') for (let i = 0; i < n; i++) addToPile();
-  else boxFill.scale.y = Math.max(0.01, 0.9 * G.done / G.total);
-  puff(new THREE.Vector3(drop.x, 1.4, drop.z), G.job === 'branches' ? 0xd9b27a : 0xd9822b, 8);
+  const J = JOBS[G.job];
+  if (J.drop === 'wood') for (let i = 0; i < n; i++) addToPile();
+  else dropFill[J.drop].scale.y = Math.max(0.01, 0.9 * G.done / G.total);
+  puff(new THREE.Vector3(drop.x, 1.4, drop.z), J.drop === 'wood' ? 0xd9b27a : J.col, 8);
   updateProgress();
   if (G.done >= G.total) jobComplete();
 }
@@ -59789,11 +59965,11 @@ function doWork(dt) {
     $('actionbar').classList.add('hidden'); G.target = null; G.actionT = 0; player.swing = Math.max(0, player.swing - dt * 5);
     tryDeposit(); return;
   }
-  const job = G.job, T = TOOLS[G.tool], st = G.st, bar = $('actionbar');
-  const full = player.bag >= st.cap;
-  const nagFull = () => { if (tAll - lastFull > 2.5) { lastFull = tAll; toast(`Полно! Неси ${DROP_NAME[JOBS[job].drop]}`, 1400); } };
+  const job = G.job, J = JOBS[job], T = TOOLS[G.tool], st = G.st, bar = $('actionbar');
+  const full = player.bag >= st.cap, pcol = J.drop === 'wood' ? 0xd9b27a : J.col;
+  const nagFull = () => { if (tAll - lastFull > 2.5) { lastFull = tAll; toast(`Полно! Неси ${DROP_NAME[J.drop]}`, 1400); } };
   let target = null;
-  if (job === 'leaves') {
+  if (J.mech === 'sweep') {
     G.sweepT -= dt;
     if (working()) {
       player.swing = Math.min(1, player.swing + dt * 6);
@@ -59825,13 +60001,13 @@ function doWork(dt) {
         const p = target.obj.position.clone(); p.y = 1.2; p.project(camera);
         bar.classList.remove('hidden'); bar.style.left = ((p.x + 1) / 2 * innerWidth) + 'px'; bar.style.top = ((1 - p.y) / 2 * innerHeight) + 'px';
         $('actionfill').style.width = Math.min(100, G.actionT / need * 100) + '%';
-        if (Math.random() < dt * 14) puff(target.obj.position.clone().setY(.4), job === 'branches' ? 0xd9b27a : 0xd9822b, 1, 1.5);
+        if (Math.random() < dt * 14) puff(target.obj.position.clone().setY(.4), pcol, 1, 1.5);
         if (G.actionT >= need) {
           G.actionT = 0; G.target = null; bar.classList.add('hidden');
-          removeItem(target, job === 'pile' ? player.pos.clone().setY(1.5) : null);
-          puff(target.obj.position.clone().setY(.4), job === 'branches' ? 0xd9b27a : 0xd9822b, 10);
+          removeItem(target, J.fly ? player.pos.clone().setY(1.5) : null);
+          puff(target.obj.position.clone().setY(.4), pcol, 10);
           player.bag++; updateCarry();
-          if (player.bag >= st.cap) toast(`${job === 'branches' ? 'Бревно' : 'Полный совок'}! Неси ${DROP_NAME[JOBS[job].drop]}`, 1500);
+          if (player.bag >= st.cap) toast(`${J.word}! Неси ${DROP_NAME[J.drop]}`, 1500);
         }
       }
     } else { G.target = null; G.actionT = 0; bar.classList.add('hidden'); }
@@ -59856,7 +60032,7 @@ function spawnHelpers() {
   }
 }
 function updateHelpers(dt) {
-  const job = G.job, cap = { leaves: 25, pile: 2, branches: 1 }[job], drop = dropPos(job);
+  const job = G.job, J = JOBS[job], cap = J.help.cap, drop = dropPos(job);
   for (const h of helpers) {
     let goal = null, busy = false;
     const noneLeft = !G.items.some(it => !it.by || it.by === h);
@@ -59875,12 +60051,12 @@ function updateHelpers(dt) {
         if (dist2(h.obj.position, p) > 1.0) goal = p;
         else {
           busy = true; h.t += dt;
-          if (h.t >= { leaves: 0.25, pile: 1.4, branches: 2.8 }[job]) {
+          if (h.t >= J.help.time) {
             h.t = 0;
-            if (job === 'leaves') {
+            if (J.mech === 'sweep') {
               let n = 0;
               for (const it of [...G.items]) { if (dist2(it.obj.position, p) < 1.3 && h.bag < cap && (!it.by || it.by === h)) { removeItem(it, h.obj.position.clone().setY(1.2)); h.bag++; n++; } }
-            } else { removeItem(h.target, null); puff(p.clone().setY(.4), 0xd9b27a, 6); h.bag++; }
+            } else { removeItem(h.target, null); puff(p.clone().setY(.4), J.drop === 'wood' ? 0xd9b27a : J.col, 6); h.bag++; }
             h.target = null;
           }
         }
@@ -59917,6 +60093,13 @@ function buildBoss(job) {
     body.add(mesh(new THREE.CylinderGeometry(.8, 1, 3, 8), logMat, 0, 1.5, 0));
     for (const s of [-1, 1]) { const arm = mesh(new THREE.CylinderGeometry(.18, .25, 2.2, 6), logMat, s * 1.4, 2, 0); arm.rotation.z = -s * 0.9; body.add(arm); const tw = mesh(new THREE.CylinderGeometry(.08, .12, 1, 5), logMat, s * 2.2, 3, 0); tw.rotation.z = s * 0.4; body.add(tw); }
     eyes(body, 2.2, .85, 1.1);
+  } else if (job !== 'pile') {
+    // босс новой работы: большая куча того, что убирали, с глазами и короной из кусочков
+    const J = JOBS[job], c = new THREE.Color(J.col);
+    body.add(mesh(new THREE.SphereGeometry(1.5, 14, 12), mat(c), 0, 1.5, 0));
+    for (let i = 0; i < 14; i++) { const a = rnd(0, 6.28), e = rnd(-.2, 1.2); body.add(mesh(new THREE.IcosahedronGeometry(rnd(.35, .6), 0), mat(c.clone().offsetHSL(rnd(-.03, .03), 0, rnd(-.1, .1))), Math.cos(a) * 1.4, 1.5 + Math.sin(e) * 1.3, Math.sin(a) * 1.4)); }
+    for (const s of [-1, 1]) body.add(mesh(new THREE.CylinderGeometry(.2, .26, 1.8, 6), mat(c.clone().offsetHSL(0, 0, -.12)), s * 1.7, 1.3, 0));
+    eyes(body, 1.8, 1.3, 1.2);
   } else {
     // Куча-Великан: большая куча листьев в коробке-короне
     body.add(mesh(new THREE.SphereGeometry(1.5, 14, 12), mat(0xc0592b), 0, 1.5, 0));
@@ -59982,7 +60165,7 @@ function updateBoss(dt) {
     b.shootT -= dt;
     if (b.shootT <= 0) {
       b.shootT = rnd(3.2, 4.5);
-      const col = { leaves: 0xd9822b, branches: 0x8a5a30, pile: 0xc0592b }[G.job];
+      const col = JOBS[G.job].col;
       for (const a of [-0.35, 0, 0.35]) {
         const v = d.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), a).multiplyScalar(5);
         const o = mesh(new THREE.IcosahedronGeometry(.3, 0), mat(col), b.obj.position.x, 1.3, b.obj.position.z); scene.add(o); G.shots.push({ obj: o, v, life: 4 });
@@ -59995,7 +60178,7 @@ function updateBoss(dt) {
     G.attackCd = 0.45 / st.sm; player.swing = 1;
     if (dist < 3.6 * st.rm) {
       b.hp -= 1 + st.da; b.hurt = .2; updateBossBar();
-      puff(b.obj.position.clone().setY(1.5), { leaves: 0xd9822b, branches: 0xd9b27a, pile: 0xc0592b }[G.job], 8);
+      puff(b.obj.position.clone().setY(1.5), JOBS[G.job].drop === 'wood' ? 0xd9b27a : JOBS[G.job].col, 8);
       b.obj.position.addScaledVector(d, -0.7);
       if (b.hp <= 0) { b.state = 'dead'; b.t = 0; puff(b.obj.position.clone().setY(1.5), 0xffe08a, 30, 6); toast('Победа!', 1500); }
     }
@@ -60036,14 +60219,16 @@ function levelWin() {
     toast('Сезон окончен!', 1500);
     return;
   }
-  toast(`Уровень ${n} пройден! +${gain} ${COIN}` + (next === 2 ? ' Открылась работа: ПИЛИТЬ ВЕТКИ' : next === 3 ? ' Открылась работа: ЛИСТЬЯ В КОРОБКУ' : next === 4 ? ' В центре двора выросло ДЕРЕВО СИЛЫ' : ''), 3400);
-  setTimeout(() => { if (G.state === 'win') toMenu(next); }, 3600);
+  grantFreeTools(); persist();
+  const fresh = first ? Object.values(JOBS).filter(j => j.unlock === next).map(j => j.name.toUpperCase()) : [];
+  toast(`Уровень ${n} пройден! +${gain} ${COIN}` + (first && next === 4 ? ' В центре двора выросло ДЕРЕВО СИЛЫ.' : '') + (fresh.length ? ` Открылись работы: ${fresh.join(', ')}` : ''), fresh.length > 1 ? 4800 : 3400);
+  setTimeout(() => { if (G.state === 'win') toMenu(next); }, fresh.length > 1 ? 5000 : 3600);
 }
 $('seasonnext').onclick = () => { $('season').classList.add('hidden'); toMenu(G.level.n + 1); };
 
 /* ================= Дерево силы (меню улучшений) ================= */
-let treeTab = 'shop';
-function openTree() { G.paused = true; mouseDown = false; if (window.__resetTouch) window.__resetTouch(); treeTab = 'shop'; renderTree(); $('tree').classList.remove('hidden'); }
+let treeTab = 'shop', treeJob = 'leaves';
+function openTree() { G.paused = true; mouseDown = false; if (window.__resetTouch) window.__resetTouch(); treeTab = 'shop'; if (G.state === 'play') treeJob = G.job; renderTree(); $('tree').classList.remove('hidden'); }
 function closeTree() {
   $('tree').classList.add('hidden'); G.paused = false; mouseDown = false; persist();
   if (G.state !== 'menu') { G.st = stats(G.tool); player.maxHp = 5 + (save.abil.hearts || 0); player.hp = Math.min(player.hp, player.maxHp); renderHearts(); updateCarry(); }
@@ -60051,7 +60236,7 @@ function closeTree() {
 }
 function toolStatLine(t) {
   const T = TOOLS[t];
-  return T.job === 'leaves'
+  return JOBS[T.job].mech === 'sweep'
     ? `охват ${T.reach}, за взмах до ${T.n} листьев, несёт ${T.cap}`
     : `дальность ${T.range}, ${T.time} сек на работу, несёт ${T.cap}`;
 }
@@ -60059,9 +60244,13 @@ function renderTree() {
   const tabs = [['shop', '🛒 Инструменты'], ['tools', '🔧 Улучшения'], ['tree', '🌳 Дерево'], ['abil', '✨ Способности']];
   let h = `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><h2 style="margin:0">🌳 Дерево силы</h2><b style="font-size:20px">Листочки: ${save.coins} ${COIN}</b></div>
     <div class="row" style="margin:12px 0">${tabs.map(([id, t]) => `<button data-act="tab:${id}" class="${treeTab === id ? 'sel' : ''}">${t}</button>`).join('')}<button data-act="close" style="margin-left:auto">Закрыть (Esc)</button></div>`;
+  const openJobs = Object.entries(JOBS).filter(([, J]) => J.unlock <= save.maxLevel);
+  if (!openJobs.some(([id]) => id === treeJob)) treeJob = G.state === 'play' && JOBS[G.job] ? G.job : 'leaves';
+  const jobChips = (treeTab === 'shop' || treeTab === 'tools') ? `<div class="row" style="margin:0 0 10px">${openJobs.map(([id, J]) => `<button data-act="tjob:${id}" class="${id === treeJob ? 'sel' : ''}" title="${J.name}">${J.icon} ${J.name}</button>`).join('')}</div>` : '';
+  h += jobChips;
   if (treeTab === 'shop') {
     h += `<p style="font-size:14px">Здесь за листочки покупаются новые инструменты для каждой работы. Купленный инструмент выбирается в главном меню перед уровнем. Листочки дают за пройденные уровни.</p>`;
-    for (const [jid, J] of Object.entries(JOBS)) {
+    for (const [jid, J] of openJobs.filter(([id]) => id === treeJob)) {
       h += `<h2>${J.icon} ${J.name}</h2>`;
       for (const t of J.tools) {
         const T = TOOLS[t], has = save.tools.includes(t);
@@ -60071,7 +60260,8 @@ function renderTree() {
     }
   } else if (treeTab === 'tools') {
     h += `<p style="font-size:14px">Инструмент либо у тебя в руках, либо лежит у дерева (<b>Q</b> у дерева: взять / положить). Работать можно только тем, что в руках. Улучшения работают у инструментов, закреплённых в <b>слотах дерева: ${save.placed.length} / ${slots()}</b>${save.workshop ? ' (у тебя есть Мастерская: слоты не нужны, улучшения работают у всех)' : ''}. Улучшение стоит ${EFFECT_COST} ${COIN}, потом его можно включать и выключать.</p>`;
-    const mine = Object.keys(TOOLS).filter(t => save.tools.includes(t));
+    const mine = Object.keys(TOOLS).filter(t => save.tools.includes(t) && TOOLS[t].job === treeJob);
+    if (!mine.length) h += `<p>В этой работе у тебя пока нет инструментов.</p>`;
     for (const t of mine) {
       const on = save.placed.includes(t), act = toolActive(t), owned = save.owned[t] || [];
       const inHand = G.state === 'play' && G.held && G.tool === t, sameJob = G.state === 'play' && TOOLS[t].job === G.job;
@@ -60110,6 +60300,7 @@ $('treebody').addEventListener('click', e => {
   const [a, x, y] = b.dataset.act.split(':');
   if (a === 'close') return closeTree();
   if (a === 'tab') treeTab = x;
+  else if (a === 'tjob') treeJob = x;
   else if (a === 'buytool') { const T = TOOLS[x]; if (!save.tools.includes(x) && save.coins >= T.price) { save.coins -= T.price; save.tools.push(x); toast(`Куплено: ${T.name}!`, 1400); refreshTreeTools(); } }
   else if (a === 'take') { if (G.state === 'play') takeTool(x); }
   else if (a === 'putback') { if (G.state === 'play') putToolBack(); }
@@ -60175,6 +60366,7 @@ function buildMenu() {
   if (!levelDef(selLevel).jobs.includes(selJob)) selJob = 'leaves';
   const L = levelDef(selLevel), jb = $('jobs'); jb.innerHTML = '';
   for (const id of Object.keys(JOBS)) {
+    if (Math.ceil(JOBS[id].unlock / SEASON) > season) continue;   // работы следующих глав пока не показываем
     const j = JOBS[id], ok = L.jobs.includes(id), b = document.createElement('button'); b.className = 'lvl' + (id === selJob ? ' sel' : ''); b.disabled = !ok;
     b.innerHTML = `${ok ? j.icon : '🔒'} ${j.name}<small>${ok ? (L.boss ? 'босс: ' + j.boss : 'нужно: ' + totalFor(id, selLevel)) : 'откроется на уровне ' + j.unlock}</small>`;
     b.onclick = () => { selJob = id; buildMenu(); };
@@ -60200,7 +60392,7 @@ function buildMenu() {
   }
   $('pts').textContent = `${COIN} Листочки: ${save.coins}`;
   $('treebtn').classList.toggle('hidden', save.maxLevel < 4);
-  $('joblvlinfo').textContent = (L.season >= SPIDER_SEASON && selJob !== 'branches' ? '🕷️ Осторожно: под листьями прячутся паучки! Бей их 2–3 раза. ' : '') + (L.boss ? 'Закончишь работу, и всё, что ты убирал, соберётся в босса.' : L.finale ? 'Конец сезона: просто большая уборка, без боя.' : 'Просто наведи порядок во дворе. Босс ждёт на 20-м уровне.');
+  $('joblvlinfo').textContent = (L.season >= SPIDER_SEASON && JOBS[selJob].spiders ? '🕷️ Осторожно: под листьями прячутся паучки! Бей их 2–3 раза. ' : '') + (L.boss ? 'Закончишь работу, и всё, что ты убирал, соберётся в босса.' : L.finale ? 'Конец сезона: просто большая уборка, без боя.' : 'Просто наведи порядок во дворе. Босс ждёт на 20-м уровне.');
 }
 function toMenu(lvl) {
   G.state = 'menu'; G.paused = false; clearLevel(); mouseDown = false; if (window.__resetTouch) window.__resetTouch(); $('tree').classList.add('hidden'); $('prompt').classList.add('hidden');
@@ -60223,7 +60415,7 @@ function runCheat(raw) {
   // to level N / N-level: открывает ГЛАВУ (сезон) N, то есть её первый уровень, а не отдельный уровень
   if ((m = s.match(/^(?:(?:to ?level|level|lvl|уровень|глава)[ -]?(\d+)|(\d+)[ -]?(?:level|lvl))$/))) {
     const ch = Math.max(1, Math.min(999, +(m[1] || m[2]))), first = (ch - 1) * SEASON + 1;
-    save.maxLevel = Math.max(save.maxLevel, first); selLevel = first; persist(); buildMenu();
+    save.maxLevel = Math.max(save.maxLevel, first); selLevel = first; grantFreeTools(); persist(); buildMenu();
     return `Готово: глава ${ch} открыта (уровни с ${first}). Нажми «Выйти во двор».`;
   }
   if ((m = s.match(/^(?:coins|монеты|листья)\s*(\d+)$/))) { save.coins += Math.min(99999, +m[1]); persist(); buildMenu(); return `Готово: +${m[1]} ${COIN}`; }
@@ -60390,7 +60582,7 @@ function movePlayer(dt) {
   const A = save.abil, mm = G.state === 'menu' ? 1 : G.st.mm;
   let speed = run ? 9 * (1 + 0.1 * (A.run || 0)) : 5.5 * (1 + 0.08 * (A.walk || 0));
   if (player.bag > 0) speed *= (1 - 0.25 * Math.min(1, player.bag / Math.max(1, G.st.cap))) * mm;
-  if (working() && G.job === 'leaves' && G.state === 'play') speed *= .8;
+  if (working() && JOBS[G.job].mech === 'sweep' && G.state === 'play') speed *= .8;
   player.pos.addScaledVector(inp, speed * dt);
   player.pos.addScaledVector(player.vel, dt); player.vel.multiplyScalar(Math.max(0, 1 - dt * 6));
   player.pos.x = THREE.MathUtils.clamp(player.pos.x, -YARD, YARD); player.pos.z = THREE.MathUtils.clamp(player.pos.z, -YARD, YARD);
@@ -60440,7 +60632,7 @@ function frame() {
 }
 selLevel = save.maxLevel; toMenu();
 frame();
-window.__game = { G, player, spawnSpider, joy, setTouchMode, startLevel, levelDef, camera, scene, spawnBoss, save, helpers: () => helpers, openTree, closeTree, stats, depositUnits };
+window.__game = { G, player, spawnSpider, joy, setTouchMode, startLevel, levelDef, camera, scene, spawnBoss, save, helpers: () => helpers, openTree, closeTree, stats, depositUnits, updateCarry, JOBS, TOOLS };
 
 </script>
 </body>
