@@ -59262,7 +59262,7 @@ const { GLTFLoader } = __gltf;
 const asset = n => (window.EMBED && window.EMBED[n]) || `./assets/${n}.glb`;
 
 /* ================= Настройки и данные ================= */
-const FACE_OFFSET = 0;         // поворот модели, если она смотрит не вперёд
+const FACE_OFFSET = Math.PI;   // поворот модели, если она смотрит не вперёд (лицо у модели смотрит в -Z, а вперёд при ходьбе +Z)
 const CHAR_HEIGHT = 2.4;
 const YARD = 19;                // половина размера двора
 const WOOD = new THREE.Vector3(-15, 0, -15);   // поленница (ветки)
@@ -59565,7 +59565,7 @@ const pack = { g: new THREE.Group(), body: null, mat: mat(0x8a6a4a), stuff: new 
   g.add(pack.body);
   for (const x of [-0.28, 0.28]) g.add(mesh(new THREE.BoxGeometry(0.05, 0.46, 0.22), strap, x, 0.02, 0.0));
   pack.stuff.position.set(0, 0.36, 0); g.add(pack.stuff);
-  g.position.set(0, 1.42, -0.34); player.model.add(g);
+  g.position.set(0, 1.42, -0.34); player.model.add(g);   // герой идёт лицом в +Z, значит спина на -Z
 }
 function updatePack() {
   const J = JOBS[G.job], k = G.held ? Math.min(1, player.bag / Math.max(1, G.st.cap)) : 0, col = new THREE.Color(J.col);
@@ -59804,6 +59804,7 @@ function startLevel(level, job, tool, seed = (Math.random() * 1e9) | 0) {
   G.spiderLeft = level.season >= SPIDER_SEASON && J.spiders ? 3 + Math.min(4, Math.floor((level.n - 21) / 4)) : 0;   // сколько паучков спрячется на уровне (под листьями)
   G.tool = tool && JOBS[job].tools.includes(tool) && save.tools.includes(tool) ? tool : JOBS[job].tools[0];
   G.st = stats(G.tool);
+  player.model.rotation.y = 0;   // в меню герой крутится, на уровне должен смотреть по ходу движения
   player.pos.set(0, 0, 15); player.dir.set(0, 0, -1); player.maxHp = 5 + (save.abil.hearts || 0); player.hp = player.maxHp; player.inv = 0; player.swing = 0;
   buildTool(G.tool, player.tool);
   treeGroup.visible = save.maxLevel >= 4;
