@@ -93,6 +93,22 @@ const EFFECTS = {};
 const effNames = job => EFFECT_NAMES[job] || EFFECT_NAMES[JOBS[job].mech === 'sweep' ? 'leaves' : 'pile'];
 for (const [t, T] of Object.entries(TOOLS)) EFFECTS[t] = effNames(T.job).map((name, i) => ({ name, desc: MOD_DESC[i], mod: MODS[i] }));
 
+/* Оружие против босса: у каждой работы своё. Появляется у дерева, когда выходит босс; рабочий инструмент приходится оставить.
+   Бьёт на среднюю дистанцию: босс может достать, но редко (дальше обычных инструментов, но не издалека). */
+const BOSS_RANGE = 2.8, BOSS_DMG = 2, BOSS_CD = 0.5;
+const BOSS_W = {};
+{
+  const T = {
+    leaves: ['Боевая метла', '🧹', 'spear'], branches: ['Секира лесоруба', '🪓', 'axe'], pile: ['Совок-булава', '🔨', 'club'],
+    grass: ['Боевая коса', '🌾', 'axe'], apples: ['Яблочная булава', '🍎', 'club'], weeds: ['Тяпка-алебарда', '🪴', 'spear'],
+    acorns: ['Жёлудёвая палица', '🌰', 'club'], mush: ['Грибной посох', '🍄', 'spear'], stones: ['Кувалда', '🔨', 'club'],
+    pumpkins: ['Тыквенная палица', '🎃', 'club'], trash: ['Мусорное копьё', '🗑️', 'spear'], webs: ['Паутинная пика', '🕸️', 'spear'],
+    snow: ['Ледяной топор', '❄️', 'axe'], potato: ['Картофельная булава', '🥔', 'club'], sunflower: ['Подсолнуховый посох', '🌻', 'spear'],
+    berries: ['Ягодная булава', '🫐', 'club'], carrots: ['Морковное копьё', '🥕', 'spear'], hay: ['Сенная секира', '🌾', 'axe'],
+  };
+  for (const id of Object.keys(JOBS)) { const [name, icon, look] = T[id] || ['Боевая палка', '🪵', 'club']; BOSS_W['bw_' + id] = { job: id, name, icon, look, scale: 1, tint: JOBS[id].col, boss: true }; }
+}
+
 const ABIL = {
   walk:   { name: 'Быстрая ходьба',    icon: '🚶', desc: '+8% к скорости ходьбы',    max: 5 },
   run:    { name: 'Быстрый бег',       icon: '🏃', desc: '+10% к скорости бега',     max: 5 },
@@ -347,7 +363,7 @@ player.tool.position.set(0.45, 1.2, 0.3); player.model.add(player.tool);
    рабочая часть сидит ровно на её конце. */
 function buildTool(id, grp) {
   grp.clear(); grp.scale.setScalar(1);
-  const T = TOOLS[id], kind = T.look;
+  const T = TOOLS[id] || BOSS_W[id], kind = T.look;
   const wood = mat(0x9a6b3c), metal = mat(0xb8c0c8, { metalness: .5, roughness: .4 }), orange = mat(0xe0702a);
   const straw = mat(T.tint ? new THREE.Color(T.tint).lerp(new THREE.Color(0xd8b45a), 0.55) : 0xd8b45a);
   const grip = new THREE.Vector3(0, 0.3, 0.2);
@@ -390,6 +406,19 @@ function buildTool(id, grp) {
     grp.add(mesh(new THREE.BoxGeometry(0.5, 0.26, 0.6), mat(T.tint ? new THREE.Color(T.tint).lerp(new THREE.Color(0xe0702a), 0.6) : 0xe0702a), 0, -0.1, 0.7));
     for (const s of [-1, 1]) grp.add(mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.06, 10), mat(0x222222), s * 0.3, -0.18, 0.9));
     const hd = mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.9, 5), mat(0x444444), 0, 0.2, 0.3); hd.rotation.x = 0.9; grp.add(hd);
+  } else if (kind === 'spear' || kind === 'axe' || kind === 'club') {   // оружие против босса: длинная ручка и боевой конец цвета добычи
+    const col = mat(new THREE.Color(T.tint || 0xe0702a), { emissive: new THREE.Color(T.tint || 0xe0702a), emissiveIntensity: 0.25 });
+    const { end, d, a } = shaft(2.1, 0.55);
+    if (kind === 'spear') {
+      const tip = mesh(new THREE.ConeGeometry(0.11, 0.55, 6), metal, end.x + d.x * 0.25, end.y + d.y * 0.25, end.z + d.z * 0.25); tip.rotation.x = Math.PI / 2 + a; grp.add(tip);
+      const tassel = mesh(new THREE.SphereGeometry(0.09, 6, 5), col, end.x - d.x * 0.15, end.y - d.y * 0.15, end.z - d.z * 0.15); grp.add(tassel);
+    } else if (kind === 'axe') {
+      grp.add(mesh(new THREE.BoxGeometry(0.08, 0.4, 0.5), metal, end.x, end.y, end.z + 0.15));
+      grp.add(mesh(new THREE.BoxGeometry(0.1, 0.16, 0.16), col, end.x, end.y + 0.02, end.z - 0.12));
+    } else {
+      const m = mesh(new THREE.SphereGeometry(0.26, 8, 7), col, end.x + d.x * 0.1, end.y + d.y * 0.1, end.z + d.z * 0.1); grp.add(m);
+      for (let k = 0; k < 6; k++) { const s = mesh(new THREE.ConeGeometry(0.05, 0.14, 4), metal, end.x + Math.cos(k * 1.05) * 0.26, end.y + Math.sin(k * 1.05) * 0.26, end.z + d.z * 0.1); s.rotation.z = k * 1.05 - Math.PI / 2; grp.add(s); }
+    }
   } else if (kind === 'chain') {
     grp.add(mesh(new THREE.BoxGeometry(0.22, 0.28, 0.5), orange, 0, 0, 0.25));
     grp.add(mesh(new THREE.BoxGeometry(0.06, 0.14, 0.9), mat(0x222222), 0, 0, 0.9));
@@ -424,7 +453,7 @@ addEventListener('keydown', e => {
   if (e.code === 'Space' && !G.paused) e.preventDefault();
   if (e.code === 'Escape') { if (G.paused) closeTree(); else if (G.state !== 'menu') toMenu(); }
   if (e.code === 'KeyE' && G.state === 'play' && !G.paused && nearTree()) openTree();
-  if (e.code === 'KeyQ' && G.state === 'play' && !G.paused && nearTree()) toggleTreeTool();
+  if (e.code === 'KeyQ' && (G.state === 'play' || G.state === 'boss') && !G.paused && nearTree()) toggleTreeTool();
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
 addEventListener('mousedown', e => { if (G.state !== 'menu' && !G.paused && !e.target.closest('button, #touch')) mouseDown = true; });
@@ -458,7 +487,7 @@ const hint = t => { $('hint').textContent = tt(t); };
   for (const ev of ['pointerup', 'pointercancel']) work.addEventListener(ev, () => { touchWork = false; work.classList.remove('on'); });
   $('trun').onclick = () => { runOn = !runOn; $('trun').classList.toggle('on', runOn); };
   $('ttree').onclick = () => { if (G.state === 'play' && !G.paused && nearTree()) openTree(); };
-  $('ttake').onclick = () => { if (G.state === 'play' && !G.paused && nearTree()) toggleTreeTool(); };
+  $('ttake').onclick = () => { if ((G.state === 'play' || G.state === 'boss') && !G.paused && nearTree()) toggleTreeTool(); };
   $('tmenu').onclick = () => { if (G.paused) closeTree(); else if (G.state !== 'menu') toMenu(); };
   window.__resetTouch = () => { touchWork = false; resetJoy(); work.classList.remove('on'); };
 }
@@ -479,6 +508,8 @@ function clearLevel() {
   for (const it of G.items) scene.remove(it.obj);
   G.items = [];
   if (G.boss) { scene.remove(G.boss.obj); G.boss = null; }
+  if (G.bwObj) { treeGroup.remove(G.bwObj); G.bwObj = null; }
+  if (G.bw) { G.bw = false; buildTool(G.tool, player.tool); }
   for (const s of G.shots) scene.remove(s.obj); G.shots = [];
   killSpiders(false); G.spiderLeft = 0; G.spiderSeen = false;
   for (const f of G.fx) scene.remove(f.obj); G.fx = [];
@@ -591,7 +622,7 @@ function updateProgress() {
   const j = JOBS[G.job];
   $('jobname').textContent = `${j.icon} ${j.name}: ${G.done} / ${G.total}`;
   $('jobfill').style.width = (100 * G.done / Math.max(1, G.total)) + '%';
-  $('bag').textContent = (G.held ? `${TOOLS[G.tool].icon} ${TOOLS[G.tool].name}   ·   ${G.job === 'branches' ? '🪵' : '🎒'} ${player.bag} / ${G.st.cap}` : `✋ Руки пустые (${TOOLS[G.tool].name} у дерева)`);
+  $('bag').textContent = G.bw ? `${BOSS_W['bw_' + G.job].icon} ${BOSS_W['bw_' + G.job].name}   ·   оружие против босса` : (G.held ?`${TOOLS[G.tool].icon} ${TOOLS[G.tool].name}   ·   ${G.job === 'branches' ? '🪵' : '🎒'} ${player.bag} / ${G.st.cap}` : `✋ Руки пустые (${TOOLS[G.tool].name} у дерева)`);
   // полоска рюкзака: заливается цветом добычи по мере наполнения
   const k = G.held ? Math.min(1, player.bag / Math.max(1, G.st.cap)) : 0;
   $('bag').style.setProperty('--fill', (100 * k) + '%'); $('bag').style.setProperty('--bagcol', '#' + new THREE.Color(j.col).getHexString());
@@ -875,8 +906,15 @@ function spawnBoss() {
   player.hp = player.maxHp; renderHearts(); player.inv = 1;
   $('bossbar').classList.remove('hidden'); $('bossname').textContent = '👹 ' + JOBS[G.job].boss; $('bossfill').style.width = '100%';
   $('actionbar').classList.add('hidden');
-  toast('Всё вокруг ожило! БОСС!', 2200);
-  hint('Бей босса: ПРОБЕЛ или мышь, когда он рядом. Уворачивайся!');
+  // оружие против босса появляется у дерева
+  G.bw = false;
+  if (G.bwObj) treeGroup.remove(G.bwObj);
+  const W = BOSS_W['bw_' + G.job], disp = new THREE.Group(), wg = new THREE.Group(); buildTool('bw_' + G.job, wg); wg.rotation.set(-1.3, 0, 0); wg.scale.setScalar(1.3); disp.add(wg);
+  disp.add(mesh(new THREE.TorusGeometry(0.9, 0.05, 6, 24), mat(0xffe27a, { emissive: 0xffc830, emissiveIntensity: 1 }), 0, 0, 0, false));
+  disp.children[1].rotation.x = Math.PI / 2; disp.position.set(0, 2.6, 2.2); treeGroup.add(disp); G.bwObj = disp;
+  player.tool.visible = G.held;
+  toast('Всё вокруг ожило! БОСС! Оружие против него лежит у дерева', 3200);
+  hint(`Подойди к дереву и нажми Q: оставишь свой инструмент и возьмёшь «${W.name}». Босса бьют только им! Уворачивайся!`);
 }
 function hurtPlayer(from, push = 4) {
   if (player.inv > 0) return;
@@ -930,13 +968,17 @@ function updateBoss(dt) {
   }
   G.attackCd -= dt;
   if (working() && G.attackCd <= 0) {
-    const st = G.held ? G.st : stats(null);   // без инструмента бьёшь кулаками
-    G.attackCd = 0.45 / st.sm; player.swing = 1;
-    if (dist < 3.6 * st.rm) {
-      b.hp -= 1 + st.da; b.hurt = .2; updateBossBar();
+    if (!G.bw) {   // босса берёт только его оружие
+      G.attackCd = 0.6; player.swing = 1;
+      if (tAll - lastNoTool > 2.5) { lastNoTool = tAll; toast('Обычным инструментом босса не взять! Оружие у дерева (Q)', 2200); }
+    } else {
+    G.attackCd = BOSS_CD; player.swing = 1;
+    if (dist < BOSS_RANGE) {
+      b.hp -= BOSS_DMG; b.hurt = .2; updateBossBar();
       puff(b.obj.position.clone().setY(1.5), JOBS[G.job].drop === 'wood' ? 0xd9b27a : JOBS[G.job].col, 8);
       b.obj.position.addScaledVector(d, -0.7);
       if (b.hp <= 0) { b.state = 'dead'; b.t = 0; puff(b.obj.position.clone().setY(1.5), 0xffe08a, 30, 6); toast('Победа!', 1500); }
+    }
     }
   }
 }
@@ -1085,7 +1127,14 @@ function takeTool(t) {
   G.held = true; applyHeld(); toast(`Взят: ${TOOLS[t].name}`, 1300); hint('Работай: держи ПРОБЕЛ. Положить инструмент обратно: Q у дерева'); return true;
 }
 /* Q у дерева: взять инструмент (тот, что выбран в меню) или положить обратно */
-function toggleTreeTool() { if (G.held) putToolBack(); else takeTool(G.tool); }
+function toggleTreeTool() { if (G.state === 'boss') toggleBossWeapon(); else if (G.held) putToolBack(); else takeTool(G.tool); }
+/* Против босса: оставляешь у дерева рабочий инструмент и берёшь оружие босса (и наоборот) */
+function toggleBossWeapon() {
+  const W = BOSS_W['bw_' + G.job];
+  if (G.bw) { G.bw = false; G.held = false; buildTool(G.tool, player.tool); player.tool.visible = false; if (G.bwObj) G.bwObj.visible = true; toast(`${W.name} положено у дерева`, 1300); }
+  else { G.bw = true; G.held = false; buildTool('bw_' + G.job, player.tool); player.tool.visible = true; if (G.bwObj) G.bwObj.visible = false; toast(`Взято: ${W.name}! Бей босса (ПРОБЕЛ)`, 1800); hint('Оружие бьёт на среднюю дистанцию: подходи близко, но следи, чтобы босс тебя не достал'); }
+  puff(new THREE.Vector3(TREE.x, 2.5, TREE.z), 0xffe27a, 12); updateCarry(); refreshTreeTools();
+}
 const treeToolsGroup = new THREE.Group(); treeGroup.add(treeToolsGroup);
 function refreshTreeTools() {
   treeToolsGroup.clear();
@@ -1293,7 +1342,7 @@ function updateRemote(m) {
     toast(`${m.name || 'Игрок'} рядом!`, 1400);
   }
   r.tx = m.x; r.tz = m.z; r.dir.set(m.dx, 0, m.dz); r.mv = m.mv; r.sw = m.sw;
-  if (m.tl && TOOLS[m.tl] && r.toolId !== m.tl) { buildTool(m.tl, r.tool); r.toolId = m.tl; }
+  if (m.tl && (TOOLS[m.tl] || BOSS_W[m.tl]) && r.toolId !== m.tl) { buildTool(m.tl, r.tool); r.toolId = m.tl; }
   r.tool.visible = !!m.held;
 }
 function removeRemote(id) { const r = net.remote.get(id); if (r) { remoteGroup.remove(r.g); net.remote.delete(id); } }
@@ -1314,7 +1363,7 @@ function netTick(dt, live) {
   net.sendT += dt;
   if (live && net.sendT > 0.08) {
     net.sendT = 0;
-    netSend({ t: 'p', name: net.name, x: +player.pos.x.toFixed(2), z: +player.pos.z.toFixed(2), dx: +player.dir.x.toFixed(2), dz: +player.dir.z.toFixed(2), mv: !!player.moving, tl: G.tool, held: G.held, sw: +player.swing.toFixed(2) });
+    netSend({ t: 'p', name: net.name, x: +player.pos.x.toFixed(2), z: +player.pos.z.toFixed(2), dx: +player.dir.x.toFixed(2), dz: +player.dir.z.toFixed(2), mv: !!player.moving, tl: G.bw ? 'bw_' + G.job : G.tool, held: G.held || G.bw, sw: +player.swing.toFixed(2) });
   }
 }
 $('netbtn').onclick = () => { $('net').classList.remove('hidden'); updateNetUI(); if (!net.role) setNetMsg(''); };
@@ -1365,13 +1414,14 @@ function frame() {
   } else if (!live) { player.model.rotation.y += dt * 0.8; player.model.position.y = 0; player.model.visible = true; player.tool.rotation.x = 0; }
   netTick(dt, live);
   // подсказки и кольцо
-  const showPrompt = G.state === 'play' && !G.paused && nearTree();
+  if (G.bwObj && G.bwObj.visible) { G.bwObj.rotation.y += dt * 1.5; G.bwObj.position.y = 2.6 + Math.sin(tAll * 3) * 0.15; }
+  const showPrompt = (G.state === 'play' || G.state === 'boss') && !G.paused && nearTree();
   $('prompt').classList.toggle('hidden', !showPrompt);
-  if (showPrompt) $('treestate').textContent = tt(G.held ? `(в руках: ${TOOLS[G.tool].name}, Q: положить)` : `(руки пустые, Q: взять ${TOOLS[G.tool].name})`);
+  if (showPrompt) $('treestate').textContent = G.state === 'boss' ? (G.bw ? `(в руках: ${BOSS_W['bw_' + G.job].name}, Q: положить)` : `(Q: оставить инструмент и взять ${BOSS_W['bw_' + G.job].name})`) : tt(G.held ? `(в руках: ${TOOLS[G.tool].name}, Q: положить)` : `(руки пустые, Q: взять ${TOOLS[G.tool].name})`);
   if (touchMode) {
     $('touch').classList.toggle('hidden', !(live && !G.paused));
     $('ttree').classList.toggle('hidden', !showPrompt); $('ttake').classList.toggle('hidden', !showPrompt);
-    if (showPrompt) $('ttakelbl').textContent = G.held ? 'Положить' : 'Взять';
+    if (showPrompt) $('ttakelbl').textContent = (G.state === 'boss' ? G.bw : G.held) ? 'Положить' : 'Взять';
   } else $('touch').classList.add('hidden');
   if (treeGroup.visible) {
     const near = dist2(player.pos, TREE) < 10 || (G.boss && dist2(G.boss.obj.position, TREE) < 6) ? 0.25 : 1;
@@ -1388,4 +1438,4 @@ function frame() {
 }
 selLevel = save.maxLevel; toMenu();
 frame();
-window.__game = { G, player, spawnSpider, joy, setTouchMode, startLevel, levelDef, camera, scene, spawnBoss, save, helpers: () => helpers, openTree, closeTree, stats, depositUnits, updateCarry, JOBS, TOOLS };
+window.__game = { toggleBossWeapon, BOSS_W, G, player, spawnSpider, joy, setTouchMode, startLevel, levelDef, camera, scene, spawnBoss, save, helpers: () => helpers, openTree, closeTree, stats, depositUnits, updateCarry, JOBS, TOOLS };
