@@ -59285,7 +59285,7 @@ const DROP_NAME = Object.fromEntries(Object.entries(DROPS).map(([k, v]) => [k, v
 const JOBS = {
   leaves:   { name: 'Убрать листья',     icon: '🍂', tools: ['broom', 'rake', 'wrake'],            drop: 'box',  boss: 'Листовой Пугало', unlock: 1, mech: 'sweep', col: 0xd9822b, item: 'leaf', spiders: true, help: { cap: 25, time: 0.25 },
             hint: 'Держи ПРОБЕЛ у листьев, потом неси их в коробку справа сзади (жёлтое кольцо). Shift: бег' },
-  branches: { name: 'Пилить ветки',      icon: '🪵', tools: ['saw', 'lsaw', 'tsaw', 'chain'],      drop: 'wood', boss: 'Дровосек-Болван', unlock: 2, mech: 'hold',  col: 0x8a5a30, item: 'log', spiders: false, help: { cap: 1, time: 2.8 }, word: 'Бревно',
+  branches: { name: 'Пилить ветки',      icon: '🪵', tools: ['saw', 'lsaw', 'tsaw', 'chain'],      drop: 'wood', boss: 'Дровосек-Болван', unlock: 2, mech: 'hold',  col: 0x8a5a30, item: 'log', spiders: true, help: { cap: 1, time: 2.8 }, word: 'Бревно',
             hint: 'Встань у ветки и держи ПРОБЕЛ: распилишь. Бревно неси на поленницу слева сзади. Shift: бег' },
   pile:     { name: 'Листья в коробку',  icon: '📦', tools: ['scoop', 'shovel', 'bucket'],         drop: 'box',  boss: 'Куча-Великан',    unlock: 3, mech: 'hold',  col: 0xc0592b, item: 'heap', spiders: true, fly: true, help: { cap: 2, time: 1.4 }, word: 'Полный совок',
             hint: 'Подбирай кучки листьев совком (ПРОБЕЛ) и неси в коробку справа сзади. Shift: бег' },
@@ -59305,7 +59305,10 @@ const NEW_JOBS = [
   ['webs', 'Снять паутину', '🕸️', 33, 'sweep', 'compost', 0xe6e6ee, 'web', 'Паучья Королева', 'снимаешь паутину', [['Метёлка', '🪶', 'broom', 0.9], ['Длинная метёлка', '🪶', 'broom', 1.5], ['Пылесос', '⚙️', 'chain', 1]]],
   ['snow', 'Чистить снег', '❄️', 41, 'sweep', 'barrel', 0xeaf4ff, 'snow', 'Снеговик-Великан', 'чистишь снег', [['Лопата для снега', '🥄', 'scoop', 1], ['Широкая лопата', '🥄', 'scoop', 1.5], ['Снегоуборщик', '⚙️', 'mower', 1.2]]],
   ['potato', 'Копать картошку', '🥔', 42, 'hold', 'crate', 0xc9a45c, 'potato', 'Картофельный Голем', 'копаешь картошку', [['Вилы', '🔱', 'hook', 1], ['Лопата-штык', '🥄', 'scoop', 1.3], ['Картофелекопалка', '⚙️', 'mower', 1.4]]],
-  ['sunflower', 'Срезать подсолнухи', '🌻', 43, 'hold', 'compost', 0xf2c21b, 'sunflower', 'Подсолнух-Громила', 'срезаешь подсолнухи', [['Секатор', '✂️', 'blade', 0.8], ['Садовые ножницы', '✂️', 'blade', 1.2], ['Мотокоса', '⚙️', 'chain', 1.3]]],
+  ['berries', 'Собрать ягоды', '🫐', 51, 'hold', 'crate', 0x5b4ac7, 'berry', 'Ягодный Хулиган', 'собираешь ягоды', [['Лукошко', '🧺', 'basket', 0.9], ['Ягодный совок', '🥄', 'scoop', 1.1], ['Ягодоуборщик', '⚙️', 'mower', 1.2]]],
+  ['carrots', 'Дёргать морковку', '🥕', 52, 'hold', 'compost', 0xef7d1a, 'carrot', 'Морковный Кролик', 'дёргаешь морковку', [['Мотыжка', '🪴', 'hoe', 0.9], ['Копалка', '🔱', 'hook', 1.2], ['Овощной комбайн', '⚙️', 'mower', 1.3]]],
+  ['hay', 'Собрать сено', '🌾', 53, 'sweep', 'compost', 0xe3c35a, 'hay', 'Сенной Великан', 'сгребаешь сено', [['Деревянные грабли', '🔱', 'rake', 0.9], ['Сенные вилы', '🔱', 'rake', 1.2], ['Сенокосилка', '⚙️', 'mower', 1.2]]],
+  ['sunflower', 'Срезать подсолнухи', '🌻', 43,'hold', 'compost', 0xf2c21b, 'sunflower', 'Подсолнух-Громила', 'срезаешь подсолнухи', [['Секатор', '✂️', 'blade', 0.8], ['Садовые ножницы', '✂️', 'blade', 1.2], ['Мотокоса', '⚙️', 'chain', 1.3]]],
 ];
 
 /* Инструменты. price = цена в листочках (0: есть сразу). cap = сколько несёшь за раз, capStep = прибавка вместимости от улучшения.
@@ -59332,7 +59335,7 @@ const TOOLS = {
       const tid = `${id}${k + 1}`; ids.push(tid);
       TOOLS[tid] = { job: id, name: tn, icon: ti, price: [0, 15, 45][k] * (1 + 0.5 * (ch - 1)) | 0, ...(mech === 'sweep' ? SWEEP : HOLD)[k], look, scale, tint: col };
     });
-    JOBS[id] = { name, icon, tools: ids, drop, boss, unlock, mech, col, item, spiders: false, fly: true, help: mech === 'sweep' ? { cap: 25, time: 0.25 } : { cap: 2, time: 1.4 }, word: 'Полная ноша',
+    JOBS[id] = { name, icon, tools: ids, drop, boss, unlock, mech, col, item, spiders: true, fly: true, help: mech === 'sweep' ? { cap: 25, time: 0.25 } : { cap: 2, time: 1.4 }, word: 'Полная ноша',
                  hint: `Ты ${doing}: держи ПРОБЕЛ ${mech === 'sweep' ? 'и води инструментом по двору' : 'у предмета'}, потом неси ${DROP_NAME[drop]}. Shift: бег` };
   }
 }
@@ -59786,6 +59789,15 @@ function makeItem(kind, x, z, i) {
   } else if (kind === 'potato') {
     o = new THREE.Group(); const mound = mesh(new THREE.SphereGeometry(0.5, 9, 6), im(0x7a5a38), 0, 0.1, 0, false); mound.scale.y = 0.4; o.add(mound);
     for (let k = 0; k < 2; k++) { const p = mesh(potatoGeo, im(0xc9a45c), rnd(-.2, .2), 0.28, rnd(-.2, .2)); p.scale.set(1.2, 0.8, 0.9); o.add(p); } o.position.set(x, 0, z);
+  } else if (kind === 'berry') {
+    o = new THREE.Group(); const b = mesh(new THREE.SphereGeometry(0.4, 8, 6), im(0x2f6b2a), 0, 0.2, 0, false); b.scale.y = 0.6; o.add(b);
+    for (let k = 0; k < 5; k++) o.add(mesh(new THREE.SphereGeometry(0.1, 7, 5), im(pick([0x5b4ac7, 0x3d3aa8, 0x7a5ad0])), rnd(-.28, .28), rnd(0.25, 0.4), rnd(-.28, .28), false)); o.position.set(x, 0, z);
+  } else if (kind === 'carrot') {
+    o = new THREE.Group(); for (let k = 0; k < 3; k++) o.add(mesh(grassGeo, im(0x3f9a2e), (k - 1) * 0.08, 0.4, 0, false));
+    const c = mesh(new THREE.ConeGeometry(0.12, 0.5, 7), im(0xef7d1a), 0, 0.12, 0, false); c.rotation.z = Math.PI; o.add(c); o.position.set(x, 0, z); o.rotation.y = rnd(0, 6.28);
+  } else if (kind === 'hay') {
+    o = new THREE.Group(); for (let k = 0; k < 4; k++) { const s = mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.9, 4), im(pick([0xe3c35a, 0xd1ab3e, 0xf0d77a])), 0, 0.08 + k * 0.03, 0, false); s.rotation.set(Math.PI / 2, 0, rnd(0, 3)); o.add(s); }
+    o.position.set(x, 0, z);
   } else {   // sunflower
     o = new THREE.Group(); o.add(mesh(new THREE.CylinderGeometry(0.05, 0.07, 1.4, 5), im(0x4e7a2a), 0, 0.7, 0));
     const h = mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.1, 12), im(0xf2c21b), 0, 1.45, 0.08); h.rotation.x = Math.PI / 2 - 0.3; o.add(h);
@@ -59891,7 +59903,7 @@ function spawnSpider(from) {
   const hp = 2 + Math.floor(Math.random() * 2);   // 2 или 3 удара
   G.spiders.push({ obj: g, body, hp, max: hp, from: from.clone().setY(0), to, t: 0, state: 'pop', hurt: 0, bite: 0.8, dir: new THREE.Vector3(0, 0, 1) });
   puff(from.clone().setY(0.5), 0xd9822b, 8);
-  toast(G.spiderSeen ? 'Паучок!' : 'Ой! Из листьев выскочил паучок! Бей его!', G.spiderSeen ? 900 : 2200); G.spiderSeen = true;
+  toast(G.spiderSeen ? 'Паучок!' : 'Ой! Выскочил паучок! Бей его!', G.spiderSeen ? 900 : 2200); G.spiderSeen = true;
 }
 function killSpiders(fx = true) {
   for (const s of G.spiders) { if (fx) puff(s.obj.position.clone().setY(0.5), 0x222222, 6); scene.remove(s.obj); }
@@ -60393,7 +60405,7 @@ function buildMenu() {
   }
   $('pts').textContent = `${COIN} Листочки: ${save.coins}`;
   $('treebtn').classList.toggle('hidden', save.maxLevel < 4);
-  $('joblvlinfo').textContent = (L.season >= SPIDER_SEASON && JOBS[selJob].spiders ? '🕷️ Осторожно: под листьями прячутся паучки! Бей их 2–3 раза. ' : '') + (L.boss ? 'Закончишь работу, и всё, что ты убирал, соберётся в босса.' : L.finale ? 'Конец сезона: просто большая уборка, без боя.' : 'Просто наведи порядок во дворе. Босс ждёт на 20-м уровне.');
+  $('joblvlinfo').textContent = (L.season >= SPIDER_SEASON && JOBS[selJob].spiders ? '🕷️ Осторожно: из-под всего, что убираешь, выскакивают паучки! Бей их 2–3 раза. ' : '') + (L.boss ? 'Закончишь работу, и всё, что ты убирал, соберётся в босса.' : L.finale ? 'Конец сезона: просто большая уборка, без боя.' : 'Просто наведи порядок во дворе. Босс ждёт на 20-м уровне.');
 }
 function toMenu(lvl) {
   G.state = 'menu'; G.paused = false; clearLevel(); mouseDown = false; if (window.__resetTouch) window.__resetTouch(); $('tree').classList.add('hidden'); $('prompt').classList.add('hidden');
