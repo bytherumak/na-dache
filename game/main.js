@@ -141,8 +141,39 @@ const totalFor = (job, n) => {
 /* ================= Сохранение ================= */
 const DEF = { maxLevel: 1, coins: 0, tools: ['broom', 'saw', 'scoop'], placed: [], owned: {}, on: {}, treeLvl: 0, workshop: false, abil: {}, helpers: 0 };
 let save = JSON.parse(JSON.stringify(DEF));
+/* Профили: на одном устройстве можно держать несколько сохранений. Перенос между устройствами: код или ссылка. */
+const PKEY = 'na-dache-profiles';
+const saveKey = id => id === 'p1' ? 'na-dache-save' : 'na-dache-save-' + id;   // первый профиль живёт в старом ключе, прогресс не теряется
+let profiles = { cur: 'p1', list: [{ id: 'p1', name: 'Игрок 1' }] };
+try { const p = JSON.parse(localStorage.getItem(PKEY)); if (p && Array.isArray(p.list) && p.list.length) profiles = p; } catch (e) {}
+if (!profiles.list.some(p => p.id === profiles.cur)) profiles.cur = profiles.list[0].id;
+const saveProfiles = () => { try { localStorage.setItem(PKEY, JSON.stringify(profiles)); } catch (e) {} };
+const encodeSave = (name, s) => 'ND1.' + btoa(unescape(encodeURIComponent(JSON.stringify({ name, s })))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+function decodeSave(text) {
+  try {
+    const i = String(text).indexOf('ND1.'); if (i < 0) return null;
+    let b = text.slice(i + 4).replace(/[^A-Za-z0-9_-]/g, '').replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '=';
+    const o = JSON.parse(decodeURIComponent(escape(atob(b))));
+    return o && o.s && +o.s.maxLevel > 0 ? o : null;
+  } catch (e) { return null; }
+}
+function addProfile(name, s) {
+  const id = 'p' + Date.now().toString(36);
+  let nm = String(name || 'Игрок').slice(0, 13), k = 1; const base = nm;
+  while (profiles.list.some(p => p.name === nm)) nm = `${base} (${++k})`;
+  profiles.list.push({ id, name: nm }); profiles.cur = id;
+  if (s) try { localStorage.setItem(saveKey(id), JSON.stringify(s)); } catch (e) {}
+  saveProfiles(); return id;
+}
+{   // ссылка переноса: открыли на другом устройстве, и сохранение само предлагает добавиться
+  const o = decodeSave(location.hash.slice(1));
+  if (o) {
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+    if (confirm(`Загрузить сохранение «${o.name || 'Игрок'}» (уровень ${o.s.maxLevel}) как новый профиль?`)) addProfile(o.name, o.s);
+  }
+}
 try {
-  const s = JSON.parse(localStorage.getItem('na-dache-save'));
+  const s = JSON.parse(localStorage.getItem(saveKey(profiles.cur)));
   if (s && s.maxLevel) {
     save = { ...save, ...s };
     if (s.points && s.coins === undefined) save.coins = s.points * 5;   // старое сохранение
@@ -150,7 +181,7 @@ try {
     save.placed = (save.placed || []).filter(t => TOOLS[t]);            // убрать несуществующие инструменты
   }
 } catch (e) {}
-const persist = () => { try { localStorage.setItem('na-dache-save', JSON.stringify(save)); } catch (e) {} };
+const persist = () => { try { localStorage.setItem(saveKey(profiles.cur), JSON.stringify(save)); } catch (e) {} };
 /* Первый (бесплатный) инструмент каждой открытой работы выдаётся сам */
 function grantFreeTools() {
   for (const [t, T] of Object.entries(TOOLS)) if (T.price === 0 && JOBS[T.job].unlock <= save.maxLevel && !save.tools.includes(t)) save.tools.push(t);
@@ -1229,7 +1260,52 @@ function runCheat(raw) {
   if (s === 'alltools' || s === 'все инструменты') { save.tools = Object.keys(TOOLS); persist(); buildMenu(); return 'Готово: все инструменты открыты.'; }
   return 'Такого кода нет.';
 }
-$('cheatbtn').onclick = () => { $('cheat').classList.remove('hidden'); $('cheatmsg').textContent = ''; $('cheatin').focus(); };
+/* ---------- Профили (окно) ---------- */
+const profCur = () => profiles.list.find(p => p.id === profiles.cur);
+const profLevel = id => { try { const s = JSON.parse(localStorage.getItem(saveKey(id))); return s && s.maxLevel ? s.maxLevel : 1; } catch (e) { return 1; } };
+const profSwitch = id => { persist(); profiles.cur = id; saveProfiles(); location.reload(); };
+function renderProfiles() {
+  $('profcur').textContent = profCur().name;
+  const box = $('proflist'); box.textContent = '';
+  for (const p of profiles.list) {
+    const row = document.createElement('div'); row.className = 'row'; row.style.cssText = 'align-items:center;margin:6px 0';
+    const nm = document.createElement('b'); nm.style.flex = '1'; nm.textContent = `${p.id === profiles.cur ? '✅ ' : ''}${p.name}  ·  уровень ${p.id === profiles.cur ? save.maxLevel : profLevel(p.id)}`; row.appendChild(nm);
+    const add = (label, fn) => { const b = document.createElement('button'); b.textContent = label; b.style.cssText = 'font-size:13px;padding:4px 10px'; b.onclick = fn; row.appendChild(b); };
+    if (p.id !== profiles.cur) add('Выбрать', () => profSwitch(p.id));
+    add('✏️', () => { const n = prompt('Новое имя профиля', p.name); if (n && n.trim()) { p.name = n.trim().slice(0, 16); saveProfiles(); renderProfiles(); } });
+    add('🗑', () => {
+      if (!confirm(`Удалить профиль «${p.name}» вместе с прогрессом? Это нельзя отменить.`)) return;
+      try { localStorage.removeItem(saveKey(p.id)); } catch (e) {}
+      profiles.list = profiles.list.filter(x => x.id !== p.id);
+      if (!profiles.list.length) profiles.list.push({ id: 'p1', name: 'Игрок 1' });
+      if (p.id === profiles.cur) { profiles.cur = profiles.list[0].id; saveProfiles(); location.reload(); return; }
+      saveProfiles(); renderProfiles();
+    });
+    box.appendChild(row);
+  }
+}
+const profLink = () => location.origin.startsWith('http') ? location.origin + location.pathname + '#' + encodeSave(profCur().name, save) : null;
+$('profbtn').onclick = () => { renderProfiles(); $('profmsg').textContent = ''; $('prof').classList.remove('hidden'); };
+$('profclose').onclick = () => $('prof').classList.add('hidden');
+$('profnew').onclick = () => {
+  const n = $('profname').value.trim() || `Игрок ${profiles.list.length + 1}`;
+  persist(); addProfile(n, null); location.reload();
+};
+$('profexp').onclick = () => { persist(); $('profcode').value = encodeSave(profCur().name, save); $('profcode').select(); $('profmsg').textContent = 'Код готов. Скопируй его и вставь на другом устройстве.'; };
+const copyText = async t => { try { await navigator.clipboard.writeText(t); return true; } catch (e) { return false; } };
+$('profcopylink').onclick = async () => {
+  persist(); const l = profLink() || encodeSave(profCur().name, save);
+  $('profcode').value = l;
+  $('profmsg').textContent = (await copyText(l)) ? 'Ссылка скопирована. Отправь её себе и открой на другом устройстве.' : 'Скопируй ссылку из поля вручную.';
+};
+$('profimp').onclick = () => {
+  const o = decodeSave($('profcode').value);
+  if (!o) { $('profmsg').textContent = 'Не получилось прочитать код. Проверь, что он скопирован целиком.'; return; }
+  persist(); addProfile(o.name, o.s); location.reload();
+};
+for (const id of ['profname', 'profcode']) { const el = $(id); el.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Escape') $('profclose').click(); }); el.addEventListener('keyup', e => e.stopPropagation()); }
+$('profcur').textContent = profCur().name;
+$('cheatbtn').onclick =() => { $('cheat').classList.remove('hidden'); $('cheatmsg').textContent = ''; $('cheatin').focus(); };
 $('cheatclose').onclick = () => $('cheat').classList.add('hidden');
 $('cheatgo').onclick = () => { $('cheatmsg').textContent = runCheat($('cheatin').value); $('cheatin').select(); };
 $('cheatin').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') $('cheatgo').click(); if (e.key === 'Escape') $('cheatclose').click(); });
@@ -1312,7 +1388,7 @@ function netHandle(m) {
   else if (m.t === 'start') {
     if (net.role !== 'guest') return;
     const tool = JOBS[m.job] && JOBS[m.job].tools.includes(selTool) && save.tools.includes(selTool) ? selTool : null;
-    $('net').classList.add('hidden'); $('cheat').classList.add('hidden');
+    $('net').classList.add('hidden'); $('cheat').classList.add('hidden'); $('prof').classList.add('hidden');
     startLevel(levelDef(m.n), m.job, tool, m.seed);
   } else if (m.t === 'rm') {
     if (G.state !== 'play' || m.seed !== G.seed) return;

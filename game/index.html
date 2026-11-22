@@ -136,9 +136,24 @@
     <div class="row" id="helpers"></div>
     <div class="row" style="margin-top:12px;align-items:center"><b id="pts" style="font-size:20px"></b><button id="treebtn" class="hidden">🌳 Дерево силы</button><button id="netbtn">🌐 Играть вместе</button></div>
     <button class="go" id="start">Выйти во двор</button>
-    <div style="text-align:center;margin-top:12px"><button id="cheatbtn" style="font-size:13px;padding:5px 12px">🔑 Чит-код</button></div>
+    <div style="text-align:center;margin-top:12px"><button id="profbtn" style="font-size:13px;padding:5px 12px">👤 Профиль: <span id="profcur"></span></button> <button id="cheatbtn" style="font-size:13px;padding:5px 12px">🔑 Чит-код</button></div>
     <p class="touchhint" style="margin-top:12px;font-size:13px">📱 Слева: палец двигает героя. Справа: большая кнопка «Работа» (держи), 🏃 включает бег. У дерева появятся кнопки «Меню» и «Взять».</p>
   <p class="kbdhint" style="margin-top:14px;font-size:14px"><kbd>WASD</kbd> / стрелки: ходить &nbsp; <kbd>Shift</kbd>: бежать &nbsp; <kbd>Пробел</kbd> или мышь: работать и бить &nbsp; <kbd>E</kbd>: меню дерева (у дерева) &nbsp; <kbd>Q</kbd>: взять / положить инструмент у дерева &nbsp; <kbd>Esc</kbd>: в меню</p>
+  </div>
+</div>
+
+<div id="prof" class="hidden overlay">
+  <div class="card" style="width:min(480px,94vw);max-height:90vh;overflow:auto">
+    <h2 style="margin-top:0">👤 Профили</h2>
+    <div id="proflist"></div>
+    <div class="row" style="margin-top:8px"><input id="profname" placeholder="Имя нового профиля" maxlength="16" autocomplete="off"><button id="profnew">➕ Новый профиль</button></div>
+    <h2>📲 Перенос на другое устройство</h2>
+    <p style="font-size:14px">Здесь нажми «Копировать ссылку» и отправь её себе (в мессенджер, почту). На другом устройстве открой ссылку: прогресс появится новым профилем. Или нажми «Получить код» и вставь код в это же окно на другом устройстве.</p>
+    <div class="row"><button id="profcopylink">🔗 Копировать ссылку</button><button id="profexp">Получить код</button></div>
+    <textarea id="profcode" rows="3" style="width:100%;margin-top:8px;box-sizing:border-box;font-size:13px" placeholder="Сюда вставь код или ссылку с другого устройства" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
+    <div class="row" style="margin-top:6px"><button id="profimp">📥 Загрузить из кода</button></div>
+    <p id="profmsg" style="font-weight:700;min-height:22px"></p>
+    <button id="profclose">Закрыть</button>
   </div>
 </div>
 
