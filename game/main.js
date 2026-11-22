@@ -129,7 +129,7 @@ function levelDef(n) {
   return {
     n, season: Math.ceil(n / SEASON), finale, boss: finale && n >= 20,
     jobs: Object.keys(JOBS).filter(id => JOBS[id].unlock <= n),   // работы открываются по уровням: 1, 2, 3, а потом по три новых в каждой главе (с её 4-го уровня)
-    hp: 12 + Math.round(n * 0.7), speed: Math.min(3.2, 1.6 + n * 0.04), shoots: true,
+    hp: 16 + Math.round(n * 0.9), speed: Math.min(4, 1.9 + n * 0.05), shoots: true,
   };
 }
 const totalFor = (job, n) => {
@@ -944,8 +944,10 @@ function updateBoss(dt) {
   }
   if (b.state === 'gone') return;
   const d = player.pos.clone().sub(b.obj.position).setY(0); const dist = d.length(); d.normalize();
-  let sp = b.speed;
-  if (b.dashing) { sp *= 3; b.dashing -= dt; if (b.dashing <= 0) { b.dashing = 0; b.dashT = rnd(4, 6); } }
+  const rage = b.hp < b.max * 0.5;   // вторая половина боя: босс злится, быстрее бегает, чаще рвётся и стреляет
+  if (rage && !b.raged) { b.raged = true; toast('Босс разозлился!', 1500); puff(b.obj.position.clone().setY(1.5), 0xff5a3a, 20, 5); }
+  let sp = b.speed * (rage ? 1.3 : 1);
+  if (b.dashing) { sp *= 3; b.dashing -= dt; if (b.dashing <= 0) { b.dashing = 0; b.dashT = rage ? rnd(2.5, 3.8) : rnd(3.5, 5); } }
   else { b.dashT -= dt; if (b.dashT < 0.6) body.position.x = Math.sin(b.t * 50) * 0.08; if (b.dashT <= 0) { b.dashing = 0.6; b.dir = d.clone(); } }
   const mv = b.dashing && b.dir ? b.dir : d;
   b.obj.position.addScaledVector(mv, sp * dt * (dist > 1.6 || b.dashing ? 1 : 0));
@@ -958,10 +960,10 @@ function updateBoss(dt) {
   if (G.level.shoots) {
     b.shootT -= dt;
     if (b.shootT <= 0) {
-      b.shootT = rnd(3.2, 4.5);
+      b.shootT = rage ? rnd(1.8, 2.6) : rnd(2.4, 3.4);
       const col = JOBS[G.job].col;
-      for (const a of [-0.35, 0, 0.35]) {
-        const v = d.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), a).multiplyScalar(5);
+      for (const a of (rage ? [-0.6, -0.3, 0, 0.3, 0.6] : [-0.4, 0, 0.4])) {
+        const v = d.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), a).multiplyScalar(rage ? 6.5 : 5.5);
         const o = mesh(new THREE.IcosahedronGeometry(.3, 0), mat(col), b.obj.position.x, 1.3, b.obj.position.z); scene.add(o); G.shots.push({ obj: o, v, life: 4 });
       }
     }
