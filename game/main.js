@@ -482,7 +482,7 @@ const tt = s => touchMode ? TT.reduce((a, [r, v]) => a.replace(r, v), s) : s;
 addEventListener('keydown', e => {
   keys[e.code] = true;
   if (e.code === 'Space' && !G.paused) e.preventDefault();
-  if (e.code === 'Escape') { if (G.paused) closeTree(); else if (G.state !== 'menu') toMenu(); }
+  if (e.code === 'Escape') { if (!$('leave').classList.contains('hidden')) closeLeave(); else if (G.paused) closeTree(); else if (G.state !== 'menu') askLeave(); }
   if (e.code === 'KeyE' && G.state === 'play' && !G.paused && nearTree()) openTree();
   if (e.code === 'KeyQ' && (G.state === 'play' || G.state === 'boss') && !G.paused && nearTree()) toggleTreeTool();
 });
@@ -523,11 +523,20 @@ const hint = t => {   // на телефоне подсказка сверху �
   $('trun').onclick = () => { runOn = !runOn; $('trun').classList.toggle('on', runOn); };
   $('ttree').onclick = () => { if (G.state === 'play' && !G.paused && nearTree()) openTree(); };
   $('ttake').onclick = () => { if ((G.state === 'play' || G.state === 'boss') && !G.paused && nearTree()) toggleTreeTool(); };
-  $('tmenu').onclick = () => { if (G.paused) closeTree(); else if (G.state !== 'menu') toMenu(); };
+  $('tmenu').onclick = () => { if (!$('leave').classList.contains('hidden')) closeLeave(); else if (G.paused) closeTree(); else if (G.state !== 'menu') askLeave(); };
   window.__resetTouch = () => { touchWork = false; resetJoy(); work.classList.remove('on'); };
 }
 function renderHearts() { $('hearts').textContent = '❤️'.repeat(player.hp) + '🤍'.repeat(Math.max(0, player.maxHp - player.hp)); }
 const nearTree = () => save.maxLevel >= 4 && dist2(player.pos, TREE) < 5;
+/* Выход с уровня: сначала спрашиваем, игра на паузе */
+function askLeave() {
+  if (G.state === 'win') { toMenu(); return; }
+  G.paused = true; mouseDown = false; if (window.__resetTouch) window.__resetTouch();
+  $('leave').classList.remove('hidden');
+}
+function closeLeave() { $('leave').classList.add('hidden'); G.paused = false; mouseDown = false; }
+$('leavestay').onclick = closeLeave;
+$('leavego').onclick = () => { $('leave').classList.add('hidden'); toMenu(); };
 const working = () => !G.paused && (keys.Space || mouseDown || touchWork);
 const dropPos = job => DROPS[JOBS[job].drop].pos;
 
@@ -1237,7 +1246,7 @@ function buildMenu() {
   $('joblvlinfo').textContent = (L.season >= SPIDER_SEASON && JOBS[selJob].spiders ? '🕷️ Осторожно: из-под всего, что убираешь, выскакивают паучки! Бей их 2–3 раза. ' : '') + (L.boss ? 'Закончишь работу, и всё, что ты убирал, соберётся в босса.' : L.finale ? 'Конец сезона: просто большая уборка, без боя.' : 'Просто наведи порядок во дворе. Босс ждёт на 20-м уровне.');
 }
 function toMenu(lvl) {
-  G.state = 'menu'; G.paused = false; clearLevel(); mouseDown = false; if (window.__resetTouch) window.__resetTouch(); $('tree').classList.add('hidden'); $('prompt').classList.add('hidden');
+  G.state = 'menu'; G.paused = false; $('leave').classList.add('hidden'); clearLevel(); mouseDown = false; if (window.__resetTouch) window.__resetTouch(); $('tree').classList.add('hidden'); $('prompt').classList.add('hidden');
   if (lvl) selLevel = Math.min(lvl, save.maxLevel);
   treeGroup.visible = save.maxLevel >= 4;
   buildMenu(); $('menu').classList.remove('hidden'); $('hud').classList.add('hidden'); $('toast').classList.remove('show');
