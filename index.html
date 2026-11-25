@@ -59773,7 +59773,11 @@ addEventListener('contextmenu', e => { if (touchMode) e.preventDefault(); });
 
 const $ = id => document.getElementById(id);
 function toast(t, ms = 1800) { const el = $('toast'); el.textContent = tt(t); el.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('show'), ms); }
-const hint = t => { $('hint').textContent = tt(t); };
+let hintTimer = 0;
+const hint = t => {   // на телефоне подсказка сверху мешает: показываем пару секунд и убираем
+  const h = $('hint'); h.textContent = tt(t); h.classList.remove('hidden'); clearTimeout(hintTimer);
+  if (touchMode) hintTimer = setTimeout(() => h.classList.add('hidden'), 4000);
+};
 
 /* экранные кнопки и джойстик (показываются только на телефоне) */
 {
