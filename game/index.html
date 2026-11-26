@@ -73,6 +73,9 @@
   #ttake { right:max(22px,env(safe-area-inset-right)); bottom:150px; width:74px; height:74px; font-size:28px; background:#ffe27aee; }
   #ttree { right:max(108px,calc(env(safe-area-inset-right) + 96px)); bottom:150px; width:74px; height:74px; font-size:28px; background:#ffe27aee; }
   #tmenu { right:max(12px,env(safe-area-inset-right)); top:max(76px,calc(env(safe-area-inset-top) + 64px)); width:46px; height:46px; font-size:22px; }
+  #tview { right:max(12px,env(safe-area-inset-right)); top:max(130px,calc(env(safe-area-inset-top) + 118px)); width:46px; height:46px; font-size:22px; }
+  #tview[data-fp="1"] { background:#cfe8a8ee; }
+  #cross { position:absolute; left:50%; top:50%; width:8px; height:8px; margin:-4px 0 0 -4px; border-radius:50%; background:#fff; border:2px solid #3b2f22; opacity:.75; pointer-events:none; }
   body.touch .kbdhint { display:none; }
   body.touch .touchhint { display:block; }
   body.touch #prompt { display:none !important; }
@@ -105,6 +108,7 @@
     <div class="pill"><div id="hearts"></div></div>
   </div>
   <div id="actionbar" class="hidden"><div class="bar"><i id="actionfill" style="background:#e0883a"></i></div></div>
+  <div id="cross" class="hidden"></div>
   <div id="toast"></div>
   <div id="netpill" class="pill hidden"></div>
   <div id="prompt" class="pill hidden" style="position:absolute;left:50%;bottom:76px;transform:translateX(-50%);background:#ffe27a;font-size:20px">🌳 <kbd>E</kbd>: меню дерева &nbsp; <kbd>Q</kbd>: взять / положить инструмент <span id="treestate" style="font-size:14px"></span></div>
@@ -115,6 +119,7 @@
   <div id="joyzone"></div>
   <div id="joybase"><i id="joyknob"></i></div>
   <button id="tmenu" aria-label="Меню">☰</button>
+  <button id="tview" aria-label="Сменить вид">👁</button>
   <button id="trun" aria-label="Бег">🏃<small>Бег</small></button>
   <button id="ttree" class="hidden" aria-label="Меню дерева">🌳<small>Меню</small></button>
   <button id="ttake" class="hidden" aria-label="Взять или положить инструмент">✋<small id="ttakelbl">Взять</small></button>
@@ -136,9 +141,9 @@
     <div class="row" id="helpers"></div>
     <div class="row" style="margin-top:12px;align-items:center"><b id="pts" style="font-size:20px"></b><button id="treebtn" class="hidden">🌳 Дерево силы</button><button id="netbtn">🌐 Играть вместе</button></div>
     <button class="go" id="start">Выйти во двор</button>
-    <div style="text-align:center;margin-top:12px"><button id="profbtn" style="font-size:13px;padding:5px 12px">👤 Профиль: <span id="profcur"></span></button> <button id="cheatbtn" style="font-size:13px;padding:5px 12px">🔑 Чит-код</button></div>
-    <p class="touchhint" style="margin-top:12px;font-size:13px">📱 Слева: палец двигает героя. Справа: большая кнопка «Работа» (держи), 🏃 включает бег. У дерева появятся кнопки «Меню» и «Взять».</p>
-  <p class="kbdhint" style="margin-top:14px;font-size:14px"><kbd>WASD</kbd> / стрелки: ходить &nbsp; <kbd>Shift</kbd>: бежать &nbsp; <kbd>Пробел</kbd> или мышь: работать и бить &nbsp; <kbd>E</kbd>: меню дерева (у дерева) &nbsp; <kbd>Q</kbd>: взять / положить инструмент у дерева &nbsp; <kbd>Esc</kbd>: в меню</p>
+    <div style="text-align:center;margin-top:12px"><button id="profbtn" style="font-size:13px;padding:5px 12px">👤 Профиль: <span id="profcur"></span></button> <button id="cheatbtn" style="font-size:13px;padding:5px 12px">🔑 Чит-код</button> <button id="viewbtn" style="font-size:13px;padding:5px 12px">👁 Вид: <span id="viewlbl"></span></button></div>
+    <p class="touchhint" style="margin-top:12px;font-size:13px">📱 Слева: палец двигает героя. Справа: большая кнопка «Работа» (держи), 🏃 включает бег. У дерева появятся кнопки «Меню» и «Взять». Вид от 1-го лица: води пальцем по правой части экрана, чтобы осмотреться; 👁 меняет вид.</p>
+  <p class="kbdhint" style="margin-top:14px;font-size:14px"><kbd>WASD</kbd> / стрелки: ходить &nbsp; <kbd>Shift</kbd>: бежать &nbsp; <kbd>Пробел</kbd> или мышь: работать и бить &nbsp; <kbd>E</kbd>: меню дерева (у дерева) &nbsp; <kbd>Q</kbd>: взять / положить инструмент у дерева &nbsp; <kbd>Esc</kbd>: в меню &nbsp; <kbd>V</kbd>: вид от 1-го / 3-го лица &nbsp; мышь: осмотреться (в 1-м лице)</p>
   </div>
 </div>
 

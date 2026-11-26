@@ -215,6 +215,7 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xbfe3f3);
 scene.fog = new THREE.Fog(0xbfe3f3, 38, 80);
 const camera = new THREE.PerspectiveCamera(48, innerWidth / innerHeight, 0.1, 200);
+scene.add(camera); camera.rotation.order = 'YXZ';   // камера в сцене: к ней крепится инструмент в руках при виде от 1-го лица
 
 scene.add(new THREE.HemisphereLight(0xffffff, 0x8a9a5b, 1.5));
 const sun = new THREE.DirectionalLight(0xfff1d0, 2.2);
@@ -468,6 +469,30 @@ let helpers = [];
 const keys = {};
 let mouseDown = false, tAll = 0, lastFull = -9, lastNoTool = -9;
 
+/* ---------- Вид от 1-го лица ---------- */
+const view = { fp: true, on: false, yaw: Math.PI, pitch: -0.12 };   // fp: выбранный вид; on: включён ли сейчас (только на уровне)
+try { const v = localStorage.getItem('na-dache-fp'); if (v !== null) view.fp = v === '1'; } catch (e) {}
+const fpHold = new THREE.Group(); fpHold.position.set(0.42, -0.45, -0.8); fpHold.rotation.y = Math.PI; fpHold.scale.setScalar(0.75); camera.add(fpHold);
+const PITCH_MAX = 1.2, clampPitch = p => THREE.MathUtils.clamp(p, -PITCH_MAX, PITCH_MAX);
+function setFPView(on) {
+  view.on = on;
+  if (on) { fpHold.add(player.tool); player.tool.position.set(0, 0, 0); camera.fov = 72; }
+  else { player.model.add(player.tool); player.tool.position.set(0.45, 1.2, 0.3); camera.fov = 48; try { document.exitPointerLock(); } catch (e) {} }
+  camera.updateProjectionMatrix(); document.getElementById('cross').classList.toggle('hidden', !on);
+}
+function toggleView() {
+  view.fp = !view.fp; try { localStorage.setItem('na-dache-fp', view.fp ? '1' : '0'); } catch (e) {}
+  for (const id of ['viewbtn', 'tview']) { const b = document.getElementById(id); if (b) b.dataset.fp = view.fp ? '1' : '0'; }
+  document.getElementById('viewlbl').textContent = view.fp ? 'от 1-го лица' : 'от 3-го лица';
+}
+addEventListener('mousemove', e => { if (view.on && document.pointerLockElement && !G.paused) { view.yaw -= e.movementX * 0.0024; view.pitch = clampPitch(view.pitch - e.movementY * 0.0024); } });
+{   // телефон: палец на свободной части экрана (справа) крутит голову
+  const cv = renderer.domElement; cv.style.touchAction = 'none'; let id = null, lx = 0, ly = 0;
+  cv.addEventListener('pointerdown', e => { if (e.pointerType !== 'touch' || !view.on || id !== null) return; id = e.pointerId; lx = e.clientX; ly = e.clientY; e.preventDefault(); try { cv.setPointerCapture(id); } catch (err) {} });
+  cv.addEventListener('pointermove', e => { if (e.pointerId !== id) return; view.yaw -= (e.clientX - lx) * 0.006; view.pitch = clampPitch(view.pitch - (e.clientY - ly) * 0.005); lx = e.clientX; ly = e.clientY; });
+  for (const ev of ['pointerup', 'pointercancel']) cv.addEventListener(ev, e => { if (e.pointerId === id) id = null; });
+}
+
 /* ---------- Телефон: сенсорное управление ---------- */
 let touchMode = TOUCH_AT_START, touchWork = false, runOn = false;
 const joy = { x: 0, y: 0, id: null };
@@ -483,11 +508,17 @@ addEventListener('keydown', e => {
   keys[e.code] = true;
   if (e.code === 'Space' && !G.paused) e.preventDefault();
   if (e.code === 'Escape') { if (!$('leave').classList.contains('hidden')) closeLeave(); else if (G.paused) closeTree(); else if (G.state !== 'menu') askLeave(); }
+  if (e.code === 'KeyV' && !G.paused) toggleView();
   if (e.code === 'KeyE' && G.state === 'play' && !G.paused && nearTree()) openTree();
   if (e.code === 'KeyQ' && (G.state === 'play' || G.state === 'boss') && !G.paused && nearTree()) toggleTreeTool();
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
-addEventListener('mousedown', e => { if (G.state !== 'menu' && !G.paused && !e.target.closest('button, #touch')) mouseDown = true; });
+addEventListener('mousedown', e => {
+  if (G.state !== 'menu' && !G.paused && !e.target.closest('button, #touch')) {
+    mouseDown = true;
+    if (view.on && !touchMode && !document.pointerLockElement) { try { const p = renderer.domElement.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (err) {} }   // мышь захватывается, чтобы крутить головой
+  }
+});
 addEventListener('mouseup', () => { mouseDown = false; });
 addEventListener('blur', () => { mouseDown = false; for (const k in keys) keys[k] = false; });
 addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); });
@@ -531,6 +562,7 @@ const nearTree = () => save.maxLevel >= 4 && dist2(player.pos, TREE) < 5;
 /* Выход с уровня: сначала спрашиваем, игра на паузе */
 function askLeave() {
   if (G.state === 'win') { toMenu(); return; }
+  try { document.exitPointerLock(); } catch (e) {}
   G.paused = true; mouseDown = false; if (window.__resetTouch) window.__resetTouch();
   $('leave').classList.remove('hidden');
 }
@@ -635,6 +667,7 @@ function startLevel(level, job, tool, seed = (Math.random() * 1e9) | 0) {
   G.tool = tool && JOBS[job].tools.includes(tool) && save.tools.includes(tool) ? tool : JOBS[job].tools[0];
   G.st = stats(G.tool);
   player.model.rotation.y = 0;   // в меню герой крутится, на уровне должен смотреть по ходу движения
+  view.yaw = Math.PI; view.pitch = -0.12;   // смотрим во двор (к дереву)
   player.pos.set(0, 0, 15); player.dir.set(0, 0, -1); player.maxHp = 5 + (save.abil.hearts || 0); player.hp = player.maxHp; player.inv = 0; player.swing = 0;
   buildTool(G.tool, player.tool);
   treeGroup.visible = save.maxLevel >= 4;
@@ -1072,7 +1105,7 @@ $('seasonnext').onclick = () => { $('season').classList.add('hidden'); toMenu(G.
 
 /* ================= Дерево силы (меню улучшений) ================= */
 let treeTab = 'shop', treeJob = 'leaves';
-function openTree() { G.paused = true; mouseDown = false; if (window.__resetTouch) window.__resetTouch(); treeTab = 'shop'; if (G.state === 'play') treeJob = G.job; renderTree(); $('tree').classList.remove('hidden'); }
+function openTree() { try { document.exitPointerLock(); } catch (e) {} G.paused = true; mouseDown = false; if (window.__resetTouch) window.__resetTouch(); treeTab = 'shop'; if (G.state === 'play') treeJob = G.job; renderTree(); $('tree').classList.remove('hidden'); }
 function closeTree() {
   $('tree').classList.add('hidden'); G.paused = false; mouseDown = false; persist();
   if (G.state !== 'menu') { G.st = stats(G.tool); player.maxHp = 5 + (save.abil.hearts || 0); player.hp = Math.min(player.hp, player.maxHp); renderHearts(); updateCarry(); }
@@ -1298,7 +1331,9 @@ function renderProfiles() {
   }
 }
 const profLink = () => location.origin.startsWith('http') ? location.origin + location.pathname + '#' + encodeSave(profCur().name, save) : null;
-$('profbtn').onclick = () => { renderProfiles(); $('profmsg').textContent = ''; $('prof').classList.remove('hidden'); };
+for (const id of ['viewbtn', 'tview']) $(id).onclick = toggleView;
+toggleView(); toggleView();   // подписи кнопок под сохранённый вид
+$('profbtn').onclick =() => { renderProfiles(); $('profmsg').textContent = ''; $('prof').classList.remove('hidden'); };
 $('profclose').onclick = () => $('prof').classList.add('hidden');
 $('profnew').onclick = () => {
   const n = $('profname').value.trim() || `Игрок ${profiles.list.length + 1}`;
@@ -1473,7 +1508,12 @@ function movePlayer(dt) {
   let ix = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
   let iz = (keys.KeyS || keys.ArrowDown ? 1 : 0) - (keys.KeyW || keys.ArrowUp ? 1 : 0);
   if (Math.hypot(joy.x, joy.y) > 0.18) { ix += joy.x; iz += joy.y; }   // джойстик на телефоне
-  const inp = new THREE.Vector3(ix, 0, iz); const moving = inp.lengthSq() > 0; if (moving) inp.normalize();
+  const inp = new THREE.Vector3(ix, 0, iz);
+  if (view.on) {   // от 1-го лица: вперёд = туда, куда смотришь; в стороны = шаг вбок
+    const s = Math.sin(view.yaw), c = Math.cos(view.yaw);
+    inp.set(-s * iz - c * ix, 0, -c * iz + s * ix);
+  }
+  const moving = inp.lengthSq() > 0; if (moving) inp.normalize();
   const run = (keys.ShiftLeft || keys.ShiftRight || runOn) && moving;
   const A = save.abil, mm = G.state === 'menu' ? 1 : G.st.mm;
   let speed = run ? 9 * (1 + 0.1 * (A.run || 0)) : 5.5 * (1 + 0.08 * (A.walk || 0));
@@ -1482,7 +1522,8 @@ function movePlayer(dt) {
   player.pos.addScaledVector(inp, speed * dt);
   player.pos.addScaledVector(player.vel, dt); player.vel.multiplyScalar(Math.max(0, 1 - dt * 6));
   player.pos.x = THREE.MathUtils.clamp(player.pos.x, -YARD, YARD); player.pos.z = THREE.MathUtils.clamp(player.pos.z, -YARD, YARD);
-  if (moving) { player.dir.lerp(inp, Math.min(1, dt * 14)).normalize(); player.walkT += dt * (run ? 15 : 10); } else player.walkT *= 0.9;
+  if (view.on) player.dir.set(Math.sin(view.yaw), 0, Math.cos(view.yaw));
+  if (moving) { if (!view.on) player.dir.lerp(inp, Math.min(1, dt * 14)).normalize(); player.walkT += dt * (run ? 15 : 10); } else player.walkT *= 0.9;
   player.inv = Math.max(0, player.inv - dt); player.moving = moving;
   player.group.position.copy(player.pos);
   player.group.rotation.y = Math.atan2(player.dir.x, player.dir.z);
@@ -1491,7 +1532,7 @@ function movePlayer(dt) {
   player.model.rotation.z = Math.sin(player.walkT) * 0.07 * w;
   player.model.rotation.x = (run ? 0.22 : 0.1) * w + player.swing * 0.25;
   player.tool.rotation.x = -player.swing * 0.9 + Math.sin(tAll * 22) * player.swing * 0.35;
-  player.model.visible = player.inv > 0 ? Math.floor(tAll * 20) % 2 === 0 : true;
+  player.model.visible = view.on ? false : player.inv > 0 ? Math.floor(tAll * 20) % 2 === 0 : true;
 }
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.05); tAll += dt;
@@ -1522,8 +1563,15 @@ function frame() {
   const f = new THREE.Vector3(player.pos.x * .85, 0, player.pos.z * .85);
   const zoom = camera.aspect < 1.2 ? 1 + (1.2 - camera.aspect) * 0.9 : 1;   // узкий (вертикальный) экран: камера дальше
   const tgt = G.state === 'menu' ? new THREE.Vector3(0, 14, 24) : new THREE.Vector3(f.x, 11 * zoom, f.z + 9.5 * zoom);
-  camPos.lerp(tgt, Math.min(1, dt * 4)); camera.position.copy(camPos);
-  camera.lookAt(G.state === 'menu' ? new THREE.Vector3(0, 0, 8) : new THREE.Vector3(f.x, 0, f.z));
+  if (view.fp && live !== view.on) setFPView(live);
+  if (view.on && !view.fp) setFPView(false);
+  if (view.on) {   // камера в глазах героя
+    camPos.set(player.pos.x, 1.62 + Math.abs(Math.sin(player.walkT)) * (player.moving ? 0.07 : 0), player.pos.z); camera.position.copy(camPos);
+    camera.rotation.set(view.pitch, view.yaw + Math.PI, 0);
+  } else {
+    camPos.lerp(tgt, Math.min(1, dt * 4)); camera.position.copy(camPos);
+    camera.lookAt(G.state === 'menu' ? new THREE.Vector3(0, 0, 8) : new THREE.Vector3(f.x, 0, f.z));
+  }
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
